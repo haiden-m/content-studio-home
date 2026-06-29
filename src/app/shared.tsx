@@ -175,7 +175,7 @@ const SECONDARY_TABS = [
 export function SecondaryIconPanel() {
   const [active, setActive] = useState(0);
   return (
-    <aside className="w-[52px] flex-shrink-0 bg-white border-r border-[#d0d5dd] flex flex-col gap-1 items-center pt-5 pb-4">
+    <aside className="w-[52px] flex-shrink-0 h-full bg-white border-r border-[#d0d5dd] flex flex-col gap-1 items-center pt-5 pb-4">
       {SECONDARY_TABS.map((tab, i) => {
         const Icon = tab.icon;
         const isActive = active === i;
@@ -198,7 +198,15 @@ export function SecondaryIconPanel() {
 
 // ─── Editor Toolbar ───────────────────────────────────────────────────────────
 
-export function EditorToolbar({ onBack }: { onBack: () => void }) {
+export function EditorToolbar({
+  onBack,
+  templateName,
+  onTemplateNameChange,
+}: {
+  onBack: () => void;
+  templateName: string;
+  onTemplateNameChange: (name: string) => void;
+}) {
   return (
     <div className="h-[82px] bg-white border-b border-[#d0d5dd] flex items-center gap-5 px-4 flex-shrink-0">
       <div className="flex items-center gap-5">
@@ -213,8 +221,14 @@ export function EditorToolbar({ onBack }: { onBack: () => void }) {
         <button className="flex items-center justify-center hover:bg-[#f2f4f7] rounded p-1">
           <Folder size={22} color="#604DD0" strokeWidth={2} />
         </button>
-        <div className="flex items-center border border-[#d0d5dd] rounded-lg px-3 py-2 bg-white min-w-[220px]">
-          <span className="text-[#101828] text-sm font-normal">Champions-league-weekend2026</span>
+        <div className="flex items-center border border-[#a4a3f3] rounded-lg px-3 py-2 bg-white min-w-[220px] shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05),0px_0px_0px_4px_rgba(112,104,222,0.24)]">
+          <input
+            type="text"
+            value={templateName}
+            onChange={(e) => onTemplateNameChange(e.target.value)}
+            placeholder="Enter template name"
+            className="flex-1 min-w-0 text-[#101828] text-sm font-normal bg-transparent focus:outline-none"
+          />
         </div>
       </div>
       <div className="flex-1 flex items-center justify-end gap-3">
@@ -248,7 +262,7 @@ export function EditorSecondaryTabs({ activeTab, onTabChange }: { activeTab: Edi
               activeTab === tab ? "bg-[#e6e5fc] text-[#344054]" : "text-[#667085] hover:bg-[#f2f4f7]"
             }`}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === "workbench" ? "Workbench" : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
       </div>

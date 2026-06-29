@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment, type ReactNode } from "react";
+import { useState, useRef, useEffect, Fragment, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   SlidersHorizontal, BadgeCheck,
@@ -11,6 +11,16 @@ import {
 
 import svgPaths from "@/imports/EmailTemplateEditorOptiAi/svg-zzsi5zbbwy";
 import { EmailTemplatePreview, DEFAULT_EMAIL_SUBJECT } from "../components/EmailTemplatePreview";
+import {
+  PersonalisationPicker,
+  type PersonalisationPickerAnchor,
+} from "../components/PersonalisationPicker";
+import {
+  DEFAULT_TEMPLATE_CONTENT,
+  type PersonalisationOption,
+  type TemplateContent,
+  type TemplateFieldId,
+} from "../templateContent";
 
 import {
   ContentStudioSidebar, TopNav, EditorToolbar, EditorSecondaryTabs,
@@ -424,6 +434,58 @@ function setVariantCellValue(variant: VariantRow, col: WorkbenchColumn, val: str
   return { ...variant, [col.type]: val };
 }
 
+function isVariantRowComplete(variant: VariantRow, columns: WorkbenchColumn[]): boolean {
+  return columns.every((col) => getVariantCellValue(variant, col).trim().length > 0);
+}
+
+function mutateFieldForAiVariant(
+  base: string,
+  col: WorkbenchColumn,
+  variantIndex: number,
+): string {
+  if (!base.trim()) return base;
+
+  if (col.type === "subjectLine") {
+    if (variantIndex === 0) {
+      return base.includes("—")
+        ? base.replace(/—.*/, "— Don't Miss Tonight's Fixtures!")
+        : `${base} — Don't miss out!`;
+    }
+    return `🔥 ${base.replace(/^🔥\s*/, "")}`;
+  }
+
+  if (col.type === "previewText") {
+    if (variantIndex === 0) return `${base} Tap in before kick-off.`;
+    return base.replace(/Big/g, "BIG").replace(/\.$/, "!");
+  }
+
+  if (col.type === "bodyTag") {
+    if (variantIndex === 0) return base.replace(/win Big/gi, "win bigger");
+    return `${base} Place your bet now.`;
+  }
+
+  return base;
+}
+
+function generateAiVariantsFromFirst(
+  first: VariantRow,
+  columns: WorkbenchColumn[],
+): VariantRow[] {
+  const generated = [0, 1].map((variantIndex) => {
+    let row = createVariantRow(variantIndex + 2);
+    columns.forEach((col) => {
+      row = setVariantCellValue(
+        row,
+        col,
+        mutateFieldForAiVariant(getVariantCellValue(first, col), col, variantIndex),
+      );
+    });
+    return row;
+  });
+
+  return [first, ...generated];
+}
+
 let bodyTagIdCounter = 0;
 function nextBodyTagId() {
   bodyTagIdCounter += 1;
@@ -679,7 +741,6 @@ function EmailDetailsVariantField({
   onChange,
   variantCount,
   showPill,
-  hasVariantWorkflow,
   onManageVariants,
 }: {
   label: string;
@@ -688,7 +749,6 @@ function EmailDetailsVariantField({
   onChange: (value: string) => void;
   variantCount: number;
   showPill: boolean;
-  hasVariantWorkflow: boolean;
   onManageVariants: () => void;
 }) {
   return (
@@ -730,7 +790,7 @@ function EmailDetailsVariantField({
         className="flex items-center gap-1.5 text-sm font-semibold text-[#7068de] hover:text-[#5f57cc] w-fit"
         style={{ fontFamily: "'Roboto', sans-serif" }}
       >
-        {hasVariantWorkflow ? (
+        {showPill ? (
           "Manage variants"
         ) : (
           <>
@@ -751,8 +811,6 @@ function EmailDetailsPanel({
   previewVariantCount,
   showSubjectPill,
   showPreviewPill,
-  subjectVariantWorkflow,
-  previewVariantWorkflow,
 }: {
   form: EmailFormState;
   onFieldChange: (key: string, value: string) => void;
@@ -761,8 +819,6 @@ function EmailDetailsPanel({
   previewVariantCount: number;
   showSubjectPill: boolean;
   showPreviewPill: boolean;
-  subjectVariantWorkflow: boolean;
-  previewVariantWorkflow: boolean;
 }) {
   return (
     <div className={`${RIGHT_PANEL_CLASS} shadow-[-2px_0_6px_rgba(16,24,40,0.06)]`}>
@@ -776,7 +832,6 @@ function EmailDetailsPanel({
           onChange={(v) => onFieldChange("subject", v)}
           variantCount={subjectVariantCount}
           showPill={showSubjectPill}
-          hasVariantWorkflow={subjectVariantWorkflow}
           onManageVariants={() => onAddVariant("subjectLine")}
         />
         <EmailDetailsVariantField
@@ -786,7 +841,6 @@ function EmailDetailsPanel({
           onChange={(v) => onFieldChange("preview", v)}
           variantCount={previewVariantCount}
           showPill={showPreviewPill}
-          hasVariantWorkflow={previewVariantWorkflow}
           onManageVariants={() => onAddVariant("previewText")}
         />
         {[
@@ -815,8 +869,44 @@ function EmailDetailsPanel({
 
 // ─── Email preview area ───────────────────────────────────────────────────────
 
-function EmailPreview({ loaded }: { loaded: boolean }) {
+function EmailPreview({
+  loaded,
+  content,
+  onContentChange,
+}: {
+  loaded: boolean;
+  content: TemplateContent;
+  onContentChange: (content: TemplateContent) => void;
+}) {
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [activeField, setActiveField] = useState<TemplateFieldId | null>(null);
+  const [picker, setPicker] = useState<{
+    fieldId: TemplateFieldId;
+    anchor: PersonalisationPickerAnchor;
+  } | null>(null);
+
+  const handleFieldClick = (
+    fieldId: TemplateFieldId,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setActiveField(fieldId);
+    setPicker({
+      fieldId,
+      anchor: { top: rect.bottom + 8, left: rect.left },
+    });
+  };
+
+  const closePicker = () => {
+    setPicker(null);
+    setActiveField(null);
+  };
+
+  const handleSelect = (option: PersonalisationOption) => {
+    if (!picker) return;
+    onContentChange({ ...content, [picker.fieldId]: option.value });
+    closePicker();
+  };
 
   return (
     <div className="flex-1 overflow-y-auto flex items-start px-4 py-6 gap-4 min-w-0">
@@ -850,12 +940,25 @@ function EmailPreview({ loaded }: { loaded: boolean }) {
               device === "mobile" ? "w-[375px]" : "w-full max-w-[660px]"
             }`}
           >
-            <EmailTemplatePreview />
+            <EmailTemplatePreview
+              content={content}
+              editable={loaded}
+              activeField={activeField}
+              onFieldClick={handleFieldClick}
+            />
           </div>
         ) : (
           <LoadingSpinner />
         )}
       </div>
+
+      {picker && (
+        <PersonalisationPicker
+          anchor={picker.anchor}
+          onSelect={handleSelect}
+          onClose={closePicker}
+        />
+      )}
     </div>
   );
 }
@@ -969,7 +1072,13 @@ function CustomerCard({
   );
 }
 
-function SmartPreviewEmailCard({ customer }: { customer: PreviewCustomer }) {
+function SmartPreviewEmailCard({
+  customer,
+  content,
+}: {
+  customer: PreviewCustomer;
+  content: TemplateContent;
+}) {
   return (
     <div className="bg-white border border-[#d0d5dd] rounded-xl overflow-hidden w-full max-w-[424px] flex flex-col max-h-full">
       <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-6 py-5 shrink-0">
@@ -998,7 +1107,13 @@ function SmartPreviewEmailCard({ customer }: { customer: PreviewCustomer }) {
         </p>
       </div>
       <div className="overflow-y-auto min-h-0">
-        <EmailTemplatePreview />
+        <EmailTemplatePreview
+          content={content}
+          resolveContext={{
+            firstName: customer.firstName,
+            availableSpend: customer.availableSpend,
+          }}
+        />
       </div>
     </div>
   );
@@ -1007,7 +1122,7 @@ function SmartPreviewEmailCard({ customer }: { customer: PreviewCustomer }) {
 type PreviewChannel = "email" | "mobilePush" | "webPopup";
 type PreviewLayout = "single" | "grid";
 
-function SmartPreviewView() {
+function SmartPreviewView({ templateContent }: { templateContent: TemplateContent }) {
   const [previewAs, setPreviewAs] = useState<"customerId" | "testGroup">("testGroup");
   const [testGroup, setTestGroup] = useState("New Campaign Testing Group");
   const [customerIdInput, setCustomerIdInput] = useState("");
@@ -1038,14 +1153,16 @@ function SmartPreviewView() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white min-w-0">
-      {/* Top bar — title + channel tabs + view controls */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-[#eaecf0]">
-        <h1 className="text-lg font-semibold text-[#101828] shrink-0" style={ROBOTO}>
-          Smart Preview
-        </h1>
+      {/* Header — mirrors two-column layout below */}
+      <div className="shrink-0 flex border-b border-[#eaecf0]">
+        <div className="w-[428px] shrink-0 px-6 py-4 border-r border-[#eaecf0]">
+          <h1 className="text-lg font-semibold text-[#101828]" style={ROBOTO}>
+            Smart Preview
+          </h1>
+        </div>
 
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="flex gap-1">
+        <div className="flex-1 flex items-center justify-between gap-4 px-6 py-4 min-w-0 bg-[#f9fafb]">
+          <div className="flex gap-1 min-w-0">
             {channelTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -1278,7 +1395,11 @@ function SmartPreviewView() {
                 >
                   {(layout === "single" ? selectedCustomers.slice(0, 1) : selectedCustomers).map(
                     (customer) => (
-                      <SmartPreviewEmailCard key={customer.id} customer={customer} />
+                      <SmartPreviewEmailCard
+                        key={customer.id}
+                        customer={customer}
+                        content={templateContent}
+                      />
                     ),
                   )}
                 </div>
@@ -1692,6 +1813,17 @@ function WorkbenchView({
     ? variants
     : [createVariantRow(1), createVariantRow(2)];
 
+  const variantOne = displayVariants.find((variant) => variant.id === 1) ?? displayVariants[0];
+  const canGenerateAiVariants =
+    initialized && variantOne != null && isVariantRowComplete(variantOne, columns);
+
+  const handleGenerateAiVariants = () => {
+    if (!canGenerateAiVariants || !variantOne) return;
+
+    const apply = () => generateAiVariantsFromFirst(variantOne, columns);
+    onVariantsChange(apply());
+  };
+
   const rowH = isExpanded ? "h-[212px]" : "h-[76px]";
   const gridTemplateColumns = `160px repeat(${columns.length}, minmax(0, 1fr))`;
 
@@ -1942,7 +2074,16 @@ function WorkbenchView({
               >
                 <Plus size={15} strokeWidth={2} /> Variant
               </button>
-              <button className="flex items-center gap-1.5 text-sm font-semibold text-[#98a2b3]">
+              <button
+                type="button"
+                disabled={!canGenerateAiVariants}
+                onClick={handleGenerateAiVariants}
+                className={`flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+                  canGenerateAiVariants
+                    ? "text-[#604dd0] hover:text-[#5342ae]"
+                    : "text-[#98a2b3] cursor-not-allowed"
+                }`}
+              >
                 <Sparkles size={15} /> Generate AI variants
               </button>
             </div>
@@ -1989,6 +2130,7 @@ export default function TemplateEditorPage({
   const [previewVariantsActive, setPreviewVariantsActive] = useState(false);
   const [workbenchInnerTab, setWorkbenchInnerTab] = useState<WorkbenchInnerTab>("variants");
   const [highlightColumnId, setHighlightColumnId] = useState<string | null>(null);
+  const [templateContent, setTemplateContent] = useState<TemplateContent>(DEFAULT_TEMPLATE_CONTENT);
 
   useEffect(() => {
     if (!initialChat || initialChat[initialChat.length - 1]?.type !== "typing") return;
@@ -2056,8 +2198,6 @@ export default function TemplateEditorPage({
 
   const showSubjectPill = subjectFilled && subjectVariantCount >= 2;
   const showPreviewPill = previewFilled && previewVariantCount >= 2;
-  const subjectVariantWorkflow = workbenchInitialized && subjectVariantCount >= 1;
-  const previewVariantWorkflow = previewVariantsActive && previewVariantCount >= 1;
 
   const handleWorkbenchActivate = (apply: (rows: VariantRow[]) => VariantRow[]) => {
     setWorkbenchInitialized(true);
@@ -2076,8 +2216,6 @@ export default function TemplateEditorPage({
       previewVariantCount={previewVariantCount}
       showSubjectPill={showSubjectPill}
       showPreviewPill={showPreviewPill}
-      subjectVariantWorkflow={subjectVariantWorkflow}
-      previewVariantWorkflow={previewVariantWorkflow}
     />
   );
 
@@ -2099,7 +2237,11 @@ export default function TemplateEditorPage({
 
         {activeTab === "content" && (
           <div className="flex-1 flex overflow-hidden bg-[#eaecf0]">
-            <EmailPreview loaded={templateLoaded} />
+            <EmailPreview
+              loaded={templateLoaded}
+              content={templateContent}
+              onContentChange={setTemplateContent}
+            />
             {rightPanel === "details" && emailDetailsPanel}
             {rightPanel === "chat" && <OptiGeniePanel initialMessages={initialChat} />}
             <RightToolbar
@@ -2135,7 +2277,7 @@ export default function TemplateEditorPage({
 
         {activeTab === "preview" && (
           <div className="flex-1 flex overflow-hidden bg-white">
-            <SmartPreviewView />
+            <SmartPreviewView templateContent={templateContent} />
             <RightToolbar
               activePanel={rightPanel}
               onSelectChat={selectChat}

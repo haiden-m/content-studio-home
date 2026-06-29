@@ -1,18 +1,27 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronDown, ChevronRight, Plus, Search, Mic, Send, Check,
-  SlidersHorizontal, LayoutGrid, List, Star, Mail, Smartphone,
-  Layers, Globe, Bell, MessageCircle, MessageSquare,
+  ArrowUpDown, LayoutGrid, List, Star, Mail, Smartphone, FileText, X,
 } from "lucide-react";
+
+import iconContentBlocks from "@/imports/TemplateTypeIcons/content-blocks.svg";
+import iconOptimail from "@/imports/TemplateTypeIcons/optimail.svg";
+import iconOptitext from "@/imports/TemplateTypeIcons/optitext.svg";
+import iconMobilePush from "@/imports/TemplateTypeIcons/mobile-push.svg";
+import iconWebInbox from "@/imports/TemplateTypeIcons/web-inbox.svg";
+import iconGroup6 from "@/imports/TemplateTypeIcons/group6.svg";
+import iconGroup7 from "@/imports/TemplateTypeIcons/group7.svg";
 
 import imgCard1 from "@/imports/ContentStudioHomePageCreate/6149919ac4de8db6ccf79c40e72210029578877f.png";
 import imgCard2 from "@/imports/ContentStudioHomePageCreate/8df9196a83d6ff752c77ceff5680104c84a2585b.png";
 import imgCard3 from "@/imports/ContentStudioHomePageCreate/eeb41cb1c8ebe158c8e4d1e9c5d1de9e6344cb75.png";
-import imgCard4 from "@/imports/ContentStudioHomePageCreate/5afa5eb19b0c2c572932f69711b78801b847d3e6.png";
+import imgCard4 from "@/assets/champions-league-email-template.png";
 import Menu from "@/imports/Menu";
 import SearchBox from "@/imports/Search";
 
 import { ContentStudioSidebar, SecondaryIconPanel, TopNav } from "../shared";
+import { type AIChatSession } from "../aiChat";
 
 // ─── Drag-scroll hook ─────────────────────────────────────────────────────────
 
@@ -38,18 +47,125 @@ function useDragScroll() {
   return { ref, onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp };
 }
 
+function useAnimatedHeight(activeKey: boolean, remeasureKey = 0) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  const hasMeasured = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    const nextHeight = el.offsetHeight;
+    if (!hasMeasured.current) {
+      hasMeasured.current = true;
+      setHeight(nextHeight);
+      return;
+    }
+
+    requestAnimationFrame(() => setHeight(nextHeight));
+  }, [activeKey, remeasureKey]);
+
+  return { contentRef, height };
+}
+
+interface UploadedFile {
+  id: string;
+  name: string;
+  size: number;
+  kind: "image" | "document";
+  previewUrl: string | null;
+  extension: string;
+}
+
+const DOCUMENT_EXTENSIONS = new Set(["PDF", "DOC", "DOCX"]);
+
+function getUploadFileKind(file: File): "image" | "document" {
+  if (file.type.startsWith("image/")) return "image";
+
+  const extension = file.name.split(".").pop()?.toUpperCase() ?? "";
+  if (DOCUMENT_EXTENSIONS.has(extension)) return "document";
+
+  if (
+    file.type === "application/pdf" ||
+    file.type === "application/msword" ||
+    file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return "document";
+  }
+
+  return "document";
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function badgeColor(extension: string) {
+  if (extension === "PDF") return "bg-[#d92d20]";
+  if (extension === "DOC" || extension === "DOCX") return "bg-[#175cd3]";
+  return "bg-[#667085]";
+}
+
+function UploadedFileAttachment({
+  file,
+  onRemove,
+}: {
+  file: UploadedFile;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="relative bg-white border border-[#eaecf0] rounded-tl-lg rounded-tr-lg rounded-br-lg max-w-[320px]">
+      <div className="flex items-start gap-3 px-3.5 py-2.5">
+        {file.kind === "image" && file.previewUrl ? (
+          <img
+            src={file.previewUrl}
+            alt={file.name}
+            className="size-10 rounded object-cover shrink-0 border border-[#eaecf0]"
+          />
+        ) : (
+          <div className="relative size-10 shrink-0">
+            <div className="size-10 rounded border border-[#d0d5dd] bg-[#f9fafb] flex items-center justify-center">
+              <FileText size={20} color="#667085" strokeWidth={1.5} />
+            </div>
+            <span
+              className={`absolute bottom-0 left-0 px-1 py-px rounded text-[10px] font-bold text-white leading-none ${badgeColor(file.extension)}`}
+            >
+              {file.extension}
+            </span>
+          </div>
+        )}
+        <div className="min-w-0 flex-1 pr-5">
+          <p className="text-sm font-medium text-[#344054] truncate">{file.name}</p>
+          <p className="text-sm text-[#475467]">{formatFileSize(file.size)}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-2 right-2 size-5 rounded-full flex items-center justify-center text-[#98a2b3] hover:bg-[#f2f4f7] hover:text-[#667085] transition-colors"
+        aria-label={`Remove ${file.name}`}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
 // ─── Template type carousel cards ────────────────────────────────────────────
 
 const TEMPLATE_TYPES = [
-  { name: "Content Blocks",     icon: Layers,         color: "#7068de", bg: "#e6e5fc" },
-  { name: "OptiMail",           icon: Mail,           color: "#2e6fdb", bg: "#dbeafe" },
-  { name: "OptiText",           icon: MessageSquare,  color: "#059669", bg: "#d1fae5" },
-  { name: "Mobile Push",        icon: Smartphone,     color: "#d97706", bg: "#fef3c7" },
-  { name: "Overlay",            icon: Globe,          color: "#0891b2", bg: "#cffafe" },
-  { name: "Mobile In-App",      icon: Smartphone,     color: "#7c3aed", bg: "#ede9fe" },
-  { name: "Embedded Messaging", icon: MessageCircle,  color: "#db2777", bg: "#fce7f3" },
-  { name: "Web Inbox",          icon: Bell,           color: "#065f46", bg: "#d1fae5" },
-  { name: "WhatsApp",           icon: MessageCircle,  color: "#16a34a", bg: "#dcfce7" },
+  { name: "Content Blocks",     icon: iconContentBlocks },
+  { name: "OptiMail",           icon: iconOptimail },
+  { name: "OptiText",           icon: iconOptitext },
+  { name: "Mobile Push",        icon: iconMobilePush },
+  { name: "Overlay",            icon: iconWebInbox },
+  { name: "Mobile In-App",      icon: iconGroup6 },
+  { name: "Embedded Messaging", icon: iconGroup7 },
+  { name: "Web Inbox",          icon: iconWebInbox },
+  { name: "WhatsApp",           icon: iconGroup6 },
 ];
 
 // ─── Template grid cards ──────────────────────────────────────────────────────
@@ -111,21 +227,98 @@ function TemplateGridCard({ card, onClick }: { card: TemplateCard; onClick?: () 
 // ─── Home Page ────────────────────────────────────────────────────────────────
 
 interface HomeProps {
-  onNavigate: (page: "template-editor") => void;
+  onNavigate: (session?: AIChatSession) => void;
 }
 
 export default function HomePage({ onNavigate }: HomeProps) {
   const carousel = useDragScroll();
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const plusMenuRef = useRef<HTMLDivElement>(null);
+  const plusMenuPortalRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [createMode, setCreateMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [createPrompt, setCreatePrompt] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const { contentRef: searchCreateRef, height: searchCreateHeight } = useAnimatedHeight(
+    createMode,
+    uploadedFiles.length + createPrompt.length,
+  );
+
+  const removeUploadedFile = (id: string) => {
+    setUploadedFiles((prev) => {
+      const target = prev.find((file) => file.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((file) => file.id !== id);
+    });
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    const nextFiles = files.map((file) => {
+      const kind = getUploadFileKind(file);
+      const extension = file.name.split(".").pop()?.toUpperCase() ?? "FILE";
+      return {
+        id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
+        name: file.name,
+        size: file.size,
+        kind,
+        previewUrl: kind === "image" ? URL.createObjectURL(file) : null,
+        extension: kind === "image" ? "IMG" : extension,
+      };
+    });
+
+    setUploadedFiles((prev) => [...prev, ...nextFiles]);
+    setShowPlusMenu(false);
+    e.target.value = "";
+  };
+
+  const openCreateMode = () => {
+    if (searchQuery.trim()) setCreatePrompt(searchQuery);
+    setCreateMode(true);
+  };
+
+  const handleSendToAI = () => {
+    const prompt = createPrompt.trim();
+    if (!prompt && uploadedFiles.length === 0) return;
+
+    onNavigate({
+      prompt,
+      attachments: uploadedFiles.map(({ name, size, extension, kind, previewUrl }) => ({
+        name,
+        size,
+        extension,
+        kind,
+        previewUrl,
+      })),
+    });
+    setCreatePrompt("");
+    setUploadedFiles([]);
+    setCreateMode(false);
+  };
+
+  const togglePlusMenu = () => {
+    if (plusMenuRef.current) {
+      const rect = plusMenuRef.current.getBoundingClientRect();
+      setMenuPosition({ top: rect.bottom + 8, left: rect.left });
+    }
+    setShowPlusMenu((v) => !v);
+  };
 
   useEffect(() => {
     if (!showPlusMenu) return;
     const handler = (e: MouseEvent) => {
-      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
-        setShowPlusMenu(false);
+      const target = e.target as Node;
+      if (
+        plusMenuRef.current?.contains(target) ||
+        plusMenuPortalRef.current?.contains(target)
+      ) {
+        return;
       }
+      setShowPlusMenu(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -138,29 +331,28 @@ export default function HomePage({ onNavigate }: HomeProps) {
   return (
     <div className="flex h-screen overflow-hidden">
       <ContentStudioSidebar />
-      <SecondaryIconPanel />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav />
 
-        <main className="flex-1 overflow-y-auto">
-          {/* Gradient hero */}
-          <div
-            className="px-6 pt-6 pb-8"
-            style={{ background: "linear-gradient(135deg, rgb(220,240,255) 0%, rgb(248,251,255) 35%, rgb(240,238,253) 70%, rgb(255,255,255) 100%)" }}
-          >
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          <SecondaryIconPanel />
+
+          <main className="flex-1 overflow-y-auto">
+          {/* Hero */}
+          <div className="px-6 pt-6 pb-8 bg-white">
             {/* Page header */}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h1 className="text-[30px] font-medium text-[#101828] leading-tight">Content Studio</h1>
-                <p className="text-sm text-[#667085] mt-0.5">Create campaign templates</p>
+                <p className="text-sm text-[#667085] mt-0.5">Your central hub for reusable content across channels.</p>
               </div>
               <div className="flex items-center gap-3">
                 <button className="h-10 px-4 border border-[#d0d5dd] rounded-lg text-sm font-semibold text-[#344054] bg-white hover:bg-[#f2f4f7] shadow-sm flex items-center gap-2 transition-colors">
                   Brands <ChevronDown size={16} color="#344054" />
                 </button>
                 <button
-                  onClick={() => onNavigate("template-editor")}
+                  onClick={openCreateMode}
                   className="h-10 px-4 bg-[#7068de] border border-[#7068de] rounded-lg text-sm font-semibold text-white hover:bg-[#5f57cc] shadow-sm flex items-center gap-2 transition-colors"
                 >
                   <Plus size={16} strokeWidth={2} /> Create
@@ -173,70 +365,95 @@ export default function HomePage({ onNavigate }: HomeProps) {
             {/* Search / AI Create Box */}
             <div className="flex justify-center mb-8">
               <div className="w-full max-w-[704px]">
-                {!createMode ? (
-                  <div className="relative rounded-xl overflow-hidden">
-                    <SearchBox />
-                    <div
-                      className="absolute bottom-0 right-0 h-[48px] w-[130px] cursor-pointer"
-                      onClick={() => setCreateMode(true)}
-                    />
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-xl border border-[#c3c3f7] shadow-[0px_4px_10px_0px_rgba(112,104,222,0.2)]">
-                    <div className="px-4 pt-4 pb-3 border-b border-[#a4a3f3]/30">
-                      <div className="flex items-center gap-3 text-[#667085] mb-4">
-                        <Search size={18} strokeWidth={1.8} />
-                        <span className="text-sm">Describe what you would like to create</span>
+                <div
+                  className="overflow-hidden transition-[height] duration-300 ease-in-out"
+                  style={{ height: searchCreateHeight ?? "auto" }}
+                >
+                  <div ref={searchCreateRef}>
+                    {!createMode ? (
+                      <div className="relative">
+                        <SearchBox value={searchQuery} onChange={setSearchQuery} />
+                        <div
+                          className="absolute bottom-0 right-0 h-[48px] w-[130px] cursor-pointer"
+                          onClick={openCreateMode}
+                        />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div ref={plusMenuRef} className="relative">
-                            <button
-                              onClick={() => setShowPlusMenu((v) => !v)}
-                              className="w-8 h-8 rounded-full border border-[#d0d5dd] bg-white flex items-center justify-center hover:bg-[#f2f4f7] shadow-sm"
-                            >
-                              <Plus size={14} color="#344054" />
-                            </button>
-                            {showPlusMenu && (
-                              <div className="absolute top-full mt-2 left-0 w-[240px] z-50">
-                                <Menu />
+                    ) : (
+                      <div className="bg-white rounded-xl border border-[#c3c3f7] shadow-[0px_4px_10px_0px_rgba(112,104,222,0.2)]">
+                        <div className="px-4 pt-4 pb-3 border-b border-[#a4a3f3]/30">
+                          <div className="flex items-start gap-3 text-[#667085] mb-4">
+                            <Search size={18} strokeWidth={1.8} className="shrink-0 mt-0.5" />
+                            <textarea
+                              value={createPrompt}
+                              onChange={(e) => setCreatePrompt(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSendToAI();
+                                }
+                              }}
+                              placeholder="Describe what you would like to create"
+                              rows={2}
+                              className="flex-1 min-w-0 resize-none text-sm text-[#101828] placeholder:text-[#667085] bg-transparent focus:outline-none leading-5"
+                            />
+                          </div>
+                          {uploadedFiles.length > 0 && (
+                            <div className="flex flex-col gap-1.5 mb-4">
+                              {uploadedFiles.map((file) => (
+                                <UploadedFileAttachment
+                                  key={file.id}
+                                  file={file}
+                                  onRemove={() => removeUploadedFile(file.id)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div ref={plusMenuRef} className="relative">
+                                <button
+                                  onClick={togglePlusMenu}
+                                  className="w-8 h-8 rounded-full border border-[#d0d5dd] bg-white flex items-center justify-center hover:bg-[#f2f4f7] shadow-sm"
+                                >
+                                  <Plus size={14} color="#344054" />
+                                </button>
                               </div>
-                            )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button className="w-8 h-8 rounded-full border border-[#d0d5dd] bg-white flex items-center justify-center hover:bg-[#f2f4f7] shadow-sm">
+                                <Mic size={14} color="#344054" />
+                              </button>
+                              <button
+                                onClick={handleSendToAI}
+                                className="w-8 h-8 rounded-full border border-[#d0d5dd] bg-white flex items-center justify-center hover:bg-[#f2f4f7] shadow-sm"
+                              >
+                                <Send size={14} color="#344054" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button className="w-8 h-8 rounded-full border border-[#d0d5dd] bg-white flex items-center justify-center hover:bg-[#f2f4f7] shadow-sm">
-                            <Mic size={14} color="#344054" />
-                          </button>
-                          <button
-                            onClick={() => onNavigate("template-editor")}
-                            className="w-8 h-8 rounded-full border border-[#d0d5dd] bg-white flex items-center justify-center hover:bg-[#f2f4f7] shadow-sm"
-                          >
-                            <Send size={14} color="#344054" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="h-12 bg-[#e6e5fc] border-t border-[#a4a3f3]/50 px-4 flex items-center justify-between rounded-b-xl">
-                      <div className="flex items-center gap-2">
-                        {["Item", "Tone"].map((label) => (
-                          <div key={label} className="flex items-center gap-1 bg-[#f8f9fc] border border-[#d5d9eb] rounded-full pl-3 pr-2 py-1">
-                            <span className="text-sm font-medium text-[#363f72]">{label}</span>
-                            <ChevronDown size={10} color="#604DD0" />
+                        <div className="h-12 bg-[#e6e5fc] border-t border-[#a4a3f3]/50 px-4 flex items-center justify-between rounded-b-xl">
+                          <div className="flex items-center gap-2">
+                            {["Item", "Tone"].map((label) => (
+                              <div key={label} className="flex items-center gap-1 bg-[#f8f9fc] border border-[#d5d9eb] rounded-full pl-3 pr-2 py-1">
+                                <span className="text-sm font-medium text-[#363f72]">{label}</span>
+                                <ChevronDown size={10} color="#604DD0" />
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCreateMode(false)}>
-                        <div className="flex items-center justify-end bg-[#7068de] rounded-full px-1 py-1 w-9">
-                          <div className="w-4 h-4 bg-white rounded-full flex items-center justify-center">
-                            <Check size={10} color="#7068de" strokeWidth={3} />
+                          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCreateMode(false)}>
+                            <div className="flex items-center justify-end bg-[#7068de] rounded-full px-1 py-1 w-9">
+                              <div className="w-4 h-4 bg-white rounded-full flex items-center justify-center">
+                                <Check size={10} color="#7068de" strokeWidth={3} />
+                              </div>
+                            </div>
+                            <span className="text-sm font-medium text-[#344054]">Create</span>
                           </div>
                         </div>
-                        <span className="text-sm font-medium text-[#344054]">Create</span>
                       </div>
-                    </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -253,22 +470,19 @@ export default function HomePage({ onNavigate }: HomeProps) {
                   className="flex gap-3 overflow-x-auto pb-2 cursor-grab select-none"
                   style={{ scrollbarWidth: "none", scrollSnapType: "x mandatory" }}
                 >
-                  {TEMPLATE_TYPES.map((type) => {
-                    const Icon = type.icon;
-                    return (
-                      <button
-                        key={type.name}
-                        style={{ scrollSnapAlign: "start" }}
-                        onClick={() => type.name === "OptiMail" ? onNavigate("template-editor") : undefined}
-                        className="flex-shrink-0 w-[190px] h-[82px] bg-white rounded-lg border border-[#eaecf0] shadow-sm hover:shadow-md hover:border-[#7068de]/40 transition-all flex items-center justify-between px-4"
-                      >
-                        <span className="text-sm font-normal text-[#101828] text-left leading-tight">{type.name}</span>
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: type.bg }}>
-                          <Icon size={18} color={type.color} strokeWidth={1.8} />
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {TEMPLATE_TYPES.map((type) => (
+                    <button
+                      key={type.name}
+                      style={{ scrollSnapAlign: "start" }}
+                      onClick={() => type.name === "OptiMail" ? onNavigate() : undefined}
+                      className="flex-shrink-0 w-[200px] h-[82px] bg-white rounded-lg border border-[#eaecf0] shadow-sm hover:shadow-md hover:border-[#7068de]/40 transition-all flex items-center justify-between px-4"
+                    >
+                      <span className="text-sm font-normal text-[#101828] text-left leading-tight">{type.name}</span>
+                      <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+                        <img src={type.icon} alt={type.name} className="w-full h-full" />
+                      </div>
+                    </button>
+                  ))}
                 </div>
                 <button
                   onClick={() => scrollCarousel("right")}
@@ -284,7 +498,7 @@ export default function HomePage({ onNavigate }: HomeProps) {
           <div className="bg-white px-6 py-6">
             <div className="flex items-center justify-between mb-5">
               <button className="h-10 px-4 border border-[#d0d5dd] rounded-lg text-sm font-semibold text-[#344054] bg-white hover:bg-[#f2f4f7] shadow-sm flex items-center gap-2">
-                <SlidersHorizontal size={16} color="#344054" /> Sort
+                <ArrowUpDown size={16} color="#344054" /> Sort
               </button>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-[#475467]">12 Templates</span>
@@ -303,13 +517,34 @@ export default function HomePage({ onNavigate }: HomeProps) {
                 <TemplateGridCard
                   key={i}
                   card={card}
-                  onClick={card.channel === "mail" ? () => onNavigate("template-editor") : undefined}
+                  onClick={card.channel === "mail" ? () => onNavigate() : undefined}
                 />
               ))}
             </div>
           </div>
         </main>
+        </div>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        multiple
+        accept="image/*,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={handleFileUpload}
+      />
+
+      {showPlusMenu && createPortal(
+        <div
+          ref={plusMenuPortalRef}
+          className="fixed z-[9999] w-[240px]"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+        >
+          <Menu onAddFile={() => fileInputRef.current?.click()} />
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

@@ -463,8 +463,22 @@ function LabelFilterPopover({
 
 // ─── TestGroupsPage ───────────────────────────────────────────────────────────
 
-export default function TestGroupsPage({ onBack, onNavigate }: { onBack?: () => void; onNavigate?: (page: string) => void } = {}) {
-  const [groups, setGroups] = useState<TestGroup[]>(INITIAL_TEST_GROUPS);
+export default function TestGroupsPage({
+  onBack,
+  onNavigate,
+  groups = INITIAL_TEST_GROUPS,
+  onGroupsChange,
+}: {
+  onBack?: () => void;
+  onNavigate?: (page: string) => void;
+  groups?: TestGroup[];
+  onGroupsChange?: (groups: TestGroup[]) => void;
+} = {}) {
+  // Wrap so callers can pass either a value or a functional updater
+  const setGroups = (updater: ((prev: TestGroup[]) => TestGroup[]) | TestGroup[]) => {
+    const next = typeof updater === "function" ? updater(groups) : updater;
+    onGroupsChange?.(next);
+  };
   const [search, setSearch] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [sizeFilter, setSizeFilter] = useState<"" | "small" | "medium" | "large">("");

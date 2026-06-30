@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment, type MouseEvent, type ReactNode } from "react";
+import { useState, useRef, useEffect, useMemo, Fragment, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import {
@@ -969,8 +969,8 @@ function EmailPreview({
 
 const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
 
-type ContentVersion = "All" | "Variant 1" | "Variant 2" | "Variant 3" | "Variant 4";
-const CONTENT_VERSIONS: ContentVersion[] = ["All", "Variant 1", "Variant 2", "Variant 3", "Variant 4"];
+type ContentVersion = "Auto" | "Variant 1" | "Variant 2" | "Variant 3" | "Variant 4";
+const CONTENT_VERSIONS: ContentVersion[] = ["Auto", "Variant 1", "Variant 2", "Variant 3", "Variant 4"];
 
 function PreviewOptionsPanel({
   selectedVariant,
@@ -984,20 +984,18 @@ function PreviewOptionsPanel({
   anchorEl: HTMLButtonElement | null;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({ opacity: 0, pointerEvents: "none" });
   const isAllMode = selectedVariant === null;
 
-  useEffect(() => {
-    if (!anchorEl) return;
+  // Compute position once from the anchor at the time the panel renders
+  const panelStyle = useMemo<React.CSSProperties>(() => {
+    if (!anchorEl) return { display: "none" };
     const rect = anchorEl.getBoundingClientRect();
-    setPanelStyle({
+    return {
       position: "fixed",
       top: rect.bottom + 8,
       right: window.innerWidth - rect.right,
       zIndex: 200,
-      opacity: 1,
-      pointerEvents: "auto",
-    });
+    };
   }, [anchorEl]);
 
   useEffect(() => {
@@ -1018,27 +1016,16 @@ function PreviewOptionsPanel({
       style={panelStyle}
       className="bg-white rounded-2xl border border-[#eaecf0] shadow-[0px_12px_32px_rgba(16,24,40,0.12),0px_4px_8px_rgba(16,24,40,0.06)] w-[180px] overflow-hidden"
     >
-      {/* Minimal top row: just X */}
-      <div className="flex justify-end px-2.5 pt-2.5 pb-0">
-        <button
-          type="button"
-          onClick={onClose}
-          className="size-6 flex items-center justify-center rounded-md text-[#98a2b3] hover:text-[#344054] hover:bg-[#f2f4f7] transition-colors"
-        >
-          <X size={13} />
-        </button>
-      </div>
-
       {/* Flat list */}
-      <div className="px-2 pb-2.5 flex flex-col gap-0.5">
+      <div className="px-2 py-2 flex flex-col gap-0.5">
         {CONTENT_VERSIONS.map((version) => {
-          const isAll = version === "All";
-          const isActive = isAll ? isAllMode : selectedVariant === version;
+          const isAuto = version === "Auto";
+          const isActive = isAuto ? isAllMode : selectedVariant === version;
           return (
             <button
               key={version}
               type="button"
-              onClick={() => onSelectVariant(isAll ? null : (selectedVariant === version ? null : version))}
+              onClick={() => onSelectVariant(isAuto ? null : (selectedVariant === version ? null : version))}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${
                 isActive
                   ? "bg-[#f5f4ff] text-[#604dd0] font-medium"
@@ -1207,8 +1194,8 @@ function CustomerCard({
 }) {
   return (
     <div
-      className={`w-full max-w-[356px] border border-[#d0d5dd] rounded-xl overflow-hidden transition-opacity ${disabled ? "opacity-50" : ""}`}
-      title={disabled ? "Variant previews support one Customer ID only." : undefined}
+      className={`w-full border border-[#d0d5dd] rounded-xl overflow-hidden transition-opacity ${disabled ? "opacity-40" : ""}`}
+      title={disabled ? "Maximum of 10 customers reached" : undefined}
     >
       <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-6 pt-5 pb-2">
         <div className="flex items-start justify-between gap-3">
@@ -1730,11 +1717,31 @@ function SendPreviewDropdown({
   );
 }
 
-function SmartPreviewView({ templateContent }: { templateContent: TemplateContent }) {
+// Adapts a Customer from the test groups data model to the PreviewCustomer shape
+// expected by CustomerCard and SmartPreviewEmailCard.
+function adaptToPreview(c: import("../data/testGroupsMock").Customer): PreviewCustomer {
+  return {
+    id: c.id,
+    firstName: c.name.split(" ")[0] || "Customer",
+    language: c.labels[0] ?? c.status,
+    availableSpend: 0,
+    email: c.email || `customer${c.id}@optimove.com`,
+  };
+}
+
+function SmartPreviewView({
+  templateContent,
+  groups = [],
+}: {
+  templateContent: TemplateContent;
+  groups?: import("../data/testGroupsMock").TestGroup[];
+}) {
   const [previewAs, setPreviewAs] = useState<"customerId" | "testGroup">("testGroup");
-  const [testGroup, setTestGroup] = useState("New Campaign Testing Group");
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id ?? "");
   const [customerIdInput, setCustomerIdInput] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() =>
+    new Set(groups[0]?.customers.slice(0, 4).map((c) => c.id) ?? []),
+  );
   const [customerPage, setCustomerPage] = useState(1);
   const [channel, setChannel] = useState<PreviewChannel>("email");
   const [layout, setLayout] = useState<PreviewLayout>("grid");
@@ -1747,13 +1754,23 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
   const isVariantMode = selectedVariant !== null;
 
   const totalPages = 1;
-  const selectedCustomers = PREVIEW_CUSTOMERS.filter((c) => selectedIds.has(c.id));
+  // When in testGroup mode, use the selected group's customers; otherwise the hardcoded set.
+  const activeGroup = groups.find((g) => g.id === selectedGroupId);
+  const testGroupCustomers: PreviewCustomer[] = activeGroup
+    ? activeGroup.customers.map(adaptToPreview)
+    : PREVIEW_CUSTOMERS;
+  const selectedCustomers = testGroupCustomers.filter((c) => selectedIds.has(c.id));
+
+  const MAX_PREVIEW_CIDS = 10;
 
   const toggleCustomer = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < MAX_PREVIEW_CIDS) {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -1794,34 +1811,6 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <div className="flex h-9 rounded-lg border border-[#d0d5dd] shadow-sm overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setLayout("single")}
-                className={`px-3 flex items-center justify-center border-r border-[#d0d5dd] ${
-                  layout === "single" ? "bg-[#e6e5fc]" : "bg-white"
-                }`}
-              >
-                <Square size={18} className="text-[#344054]" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayout("grid")}
-                className={`px-3 flex items-center justify-center ${
-                  layout === "grid" ? "bg-[#e6e5fc]" : "bg-white"
-                }`}
-              >
-                <LayoutGrid size={18} className="text-[#344054]" />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => openExpandedPreview(selectedCustomers, templateContent)}
-              className="h-9 w-9 flex items-center justify-center rounded-lg border border-[#d0d5dd] bg-white shadow-sm hover:bg-[#f2f4f7]"
-              title="Open all variants in new tab"
-            >
-              <Maximize2 size={18} className="text-[#344054]" />
-            </button>
             {/* Variants picker trigger */}
             <button
               ref={previewOptionsBtnRef}
@@ -1837,7 +1826,43 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
               <SlidersHorizontal size={15} strokeWidth={isVariantMode ? 2 : 1.75} />
               <span>Variants</span>
             </button>
-            <SendPreviewDropdown customers={selectedCustomers} templateContent={templateContent} />
+
+            {/* Expand */}
+            <button
+              type="button"
+              onClick={() => openExpandedPreview(selectedCustomers, templateContent)}
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-[#d0d5dd] bg-white shadow-sm hover:bg-[#f2f4f7]"
+              title="Open in new tab"
+            >
+              <Maximize2 size={18} className="text-[#344054]" />
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-[#e4e7ec] shrink-0" />
+
+            {/* Layout toggle */}
+            <div className="flex h-9 rounded-lg border border-[#d0d5dd] shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setLayout("single")}
+                className={`px-3 flex items-center justify-center border-r border-[#d0d5dd] ${
+                  layout === "single" ? "bg-[#e6e5fc]" : "bg-white hover:bg-[#f9fafb]"
+                }`}
+                title="Single view"
+              >
+                <Square size={16} className="text-[#344054]" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayout("grid")}
+                className={`px-3 flex items-center justify-center ${
+                  layout === "grid" ? "bg-[#e6e5fc]" : "bg-white hover:bg-[#f9fafb]"
+                }`}
+                title="Grid view"
+              >
+                <LayoutGrid size={16} className="text-[#344054]" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1845,11 +1870,11 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left panel */}
         <aside className="w-[428px] shrink-0 border-r border-[#eaecf0] shadow-[0px_0px_1.5px_rgba(16,24,40,0.1),0px_1px_1px_rgba(16,24,40,0.06)] overflow-y-auto px-6 pb-8">
-          <div className="flex flex-col gap-7">
+          <div className="flex flex-col gap-6">
             {/* Preview template as */}
-            <section className="flex flex-col gap-5">
-              <h2 className="text-base font-semibold text-[#101828] pt-6" style={ROBOTO}>
-                Preview template as:
+            <section className="flex flex-col gap-4">
+              <h2 className="text-sm font-semibold text-[#667085] uppercase tracking-wide pt-6" style={ROBOTO}>
+                Preview as
               </h2>
 
               <div className="flex gap-2 items-start">
@@ -1883,41 +1908,73 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
                     <label className="block text-sm font-medium text-[#344054] mb-1.5" style={ROBOTO}>
                       Test Group
                     </label>
-                    <div className="flex items-center gap-2 px-3 py-2 border border-[#d0d5dd] rounded-lg shadow-sm bg-white">
-                      <Search size={18} className="text-[#667085] shrink-0" />
-                      <input
-                        type="text"
-                        value={testGroup}
-                        onChange={(e) => setTestGroup(e.target.value)}
+                    {groups.length === 0 ? (
+                      <p className="text-sm text-[#98a2b3] italic" style={ROBOTO}>
+                        No test groups yet — create one in the Audience page.
+                      </p>
+                    ) : (
+                      <select
+                        value={selectedGroupId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedGroupId(id);
+                          const grp = groups.find((g) => g.id === id);
+                          if (grp) {
+                            // Auto-select up to 4 customers from the new group
+                            setSelectedIds(new Set(grp.customers.slice(0, 4).map((c) => c.id)));
+                          }
+                        }}
                         disabled={previewAs !== "testGroup"}
-                        className="flex-1 min-w-0 text-base font-medium text-[#101828] focus:outline-none disabled:text-[#98a2b3]"
+                        className="w-full px-3 py-2 border border-[#d0d5dd] rounded-lg shadow-sm bg-white text-sm font-medium text-[#101828] focus:outline-none focus:ring-1 focus:ring-[#7068de] disabled:text-[#98a2b3] disabled:bg-[#f9fafb]"
                         style={ROBOTO}
-                      />
-                      {testGroup && previewAs === "testGroup" && (
-                        <button
-                          type="button"
-                          onClick={() => setTestGroup("")}
-                          className="text-[#667085] hover:text-[#344054]"
-                        >
-                          <X size={18} />
-                        </button>
-                      )}
-                    </div>
+                      >
+                        {groups.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name} ({g.customers.length} customers)
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
 
                 {previewAs === "testGroup" && (
-                  <div className="flex flex-col gap-3 items-end">
-                    {PREVIEW_CUSTOMERS.map((customer) => (
-                      <CustomerCard
-                        key={customer.id}
-                        customer={customer}
-                        selected={selectedIds.has(customer.id)}
-                        onToggle={() => toggleCustomer(customer.id)}
-                      />
-                    ))}
+                  <div className="flex flex-col gap-3">
+                    {/* CID count */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#475467]" style={ROBOTO}>
+                        {selectedIds.size > 0 ? (
+                          <><span className="font-semibold text-[#344054]">{selectedIds.size}</span> of {MAX_PREVIEW_CIDS} selected</>
+                        ) : (
+                          <>Select up to {MAX_PREVIEW_CIDS} customers</>
+                        )}
+                      </span>
+                      {selectedIds.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIds(new Set())}
+                          className="text-xs font-medium text-[#667085] hover:text-[#344054]"
+                          style={ROBOTO}
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
 
-                    <div className="w-full flex items-center justify-between border-t border-[#eaecf0] px-4 py-3">
+                    {testGroupCustomers.map((customer) => {
+                      const atLimit = selectedIds.size >= MAX_PREVIEW_CIDS && !selectedIds.has(customer.id);
+                      return (
+                        <CustomerCard
+                          key={customer.id}
+                          customer={customer}
+                          selected={selectedIds.has(customer.id)}
+                          onToggle={() => toggleCustomer(customer.id)}
+                          disabled={atLimit}
+                        />
+                      );
+                    })}
+
+                    <div className="flex items-center justify-between border-t border-[#eaecf0] px-4 py-3">
                       <button
                         type="button"
                         onClick={() => setCustomerPage((p) => Math.max(1, p - 1))}
@@ -2706,6 +2763,7 @@ function WorkbenchView({
 interface TemplateEditorProps {
   onBack?: () => void;
   onNavigate?: (page: string) => void;
+  groups?: import("../data/testGroupsMock").TestGroup[];
   initialTab?: EditorTab;
   initialChat?: ChatMessage[];
 }
@@ -2713,6 +2771,7 @@ interface TemplateEditorProps {
 export default function TemplateEditorPage({
   onBack = () => {},
   onNavigate,
+  groups = [],
   initialTab = "content",
   initialChat,
 }: TemplateEditorProps) {
@@ -2881,7 +2940,7 @@ export default function TemplateEditorPage({
 
         {activeTab === "preview" && (
           <div className="flex-1 flex overflow-hidden bg-white">
-            <SmartPreviewView templateContent={templateContent} />
+            <SmartPreviewView templateContent={templateContent} groups={groups} />
             <RightToolbar
               activePanel={rightPanel}
               onSelectChat={selectChat}

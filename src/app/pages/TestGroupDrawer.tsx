@@ -368,7 +368,12 @@ function UploadCSVTab({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => { onAdd(validIds); setPhase("idle"); setRows(previewRows); }}
+          onClick={() => {
+            onAdd(validIds);
+            setPhase("idle");
+            setRows(previewRows);
+            if (fileRef.current) fileRef.current.value = "";
+          }}
           disabled={validIds.length === 0}
           className="h-9 px-4 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] disabled:opacity-40"
           style={ROBOTO}
@@ -378,7 +383,11 @@ function UploadCSVTab({
         </button>
         <button
           type="button"
-          onClick={() => { setPhase("idle"); setRows(previewRows); }}
+          onClick={() => {
+            setPhase("idle");
+            setRows(previewRows);
+            if (fileRef.current) fileRef.current.value = "";
+          }}
           className="h-9 px-3 text-sm text-[#344054] border border-[#d0d5dd] rounded-lg hover:bg-[#f9fafb]"
           style={ROBOTO}
         >
@@ -403,11 +412,23 @@ function CustomerTable({
   onRemoveLabel: (id: string, label: string) => void;
 }) {
   const [labelPopover, setLabelPopover] = useState<string | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!labelPopover) return;
+    const handler = (e: MouseEvent) => {
+      if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
+        setLabelPopover(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [labelPopover]);
 
   if (customers.length === 0) return null;
 
   return (
-    <div className="border border-[#eaecf0] rounded-xl overflow-hidden">
+    <div className="border border-[#eaecf0] rounded-xl overflow-hidden" ref={tableRef}>
       {/* Header */}
       <div className="grid grid-cols-[1fr_100px_1fr_80px_1fr_auto] bg-[#f9fafb] border-b border-[#eaecf0]">
         {["Name", "ID", "Email", "Country", "Labels", ""].map((h, i) => (

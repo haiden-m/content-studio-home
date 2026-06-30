@@ -548,18 +548,21 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
   };
 
   const handleBulkDuplicate = () => {
-    const dups = groups
-      .filter((g) => selectedIds.has(g.id))
-      .map((g) => ({
-        ...g,
-        id: `tg-${Date.now()}-${Math.random()}`,
-        name: `${g.name} (copy)`,
-        createdAt: new Date().toISOString().slice(0, 10),
-        updatedAt: new Date().toISOString().slice(0, 10),
-        usageCount: 0,
-        isPinned: false,
-      }));
-    setGroups((prev) => [...dups, ...prev]);
+    const idsToClone = new Set(selectedIds);
+    setGroups((prev) => {
+      const dups = prev
+        .filter((g) => idsToClone.has(g.id))
+        .map((g) => ({
+          ...g,
+          id: `tg-${Date.now()}-${Math.random()}`,
+          name: `${g.name} (copy)`,
+          createdAt: new Date().toISOString().slice(0, 10),
+          updatedAt: new Date().toISOString().slice(0, 10),
+          usageCount: 0,
+          isPinned: false,
+        }));
+      return [...dups, ...prev];
+    });
     setSelectedIds(new Set());
   };
 

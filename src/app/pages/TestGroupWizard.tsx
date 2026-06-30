@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { type TestGroup, type Customer, CUSTOMER_PROFILES, ALL_LABELS, LABEL_COLORS } from "../data/testGroupsMock";
 import { LabelChip } from "./TestGroups";
-import { LogoMark } from "../shared";
+import { ContentStudioSidebar, TopNav } from "../shared";
 
 const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
 const MAX_CUSTOMERS = 500;
@@ -615,63 +615,68 @@ export default function TestGroupWizardPage({
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
-      {/* Top bar */}
-      <header className="shrink-0 flex items-center justify-between px-8 py-4 border-b border-[#eaecf0] bg-white">
-        <div className="flex items-center gap-3">
-          <LogoMark size={22} />
-          <button type="button" onClick={handleClose} className="flex items-center gap-1.5 text-sm text-[#667085] hover:text-[#344054] transition-colors" style={ROBOTO}>
-            <ArrowLeft size={15} />
-            Test Groups
+    <div className="flex h-screen overflow-hidden">
+      <ContentStudioSidebar />
+
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <TopNav />
+
+        {/* Wizard sub-header: breadcrumb + stepper + close */}
+        <div className="shrink-0 flex items-center justify-between px-8 py-4 border-b border-[#eaecf0] bg-white">
+          <div className="flex items-center gap-2" style={ROBOTO}>
+            <button type="button" onClick={handleClose} className="flex items-center gap-1.5 text-sm text-[#667085] hover:text-[#344054] transition-colors">
+              <ArrowLeft size={15} />
+              Test Groups
+            </button>
+            <span className="text-[#d0d5dd]">/</span>
+            <span className="text-sm font-medium text-[#101828]">
+              {isEdit ? `Edit: ${group.name}` : "New Test Group"}
+            </span>
+          </div>
+
+          <Stepper current={step} />
+
+          <button type="button" onClick={handleClose} className="p-2 rounded-lg text-[#667085] hover:bg-[#f2f4f7] hover:text-[#344054] transition-colors">
+            <X size={18} />
           </button>
-          <span className="text-[#d0d5dd]">/</span>
-          <span className="text-sm font-medium text-[#101828]" style={ROBOTO}>
-            {isEdit ? `Edit: ${group.name}` : "New Test Group"}
-          </span>
         </div>
 
-        <Stepper current={step} />
+        {/* Step content */}
+        <main className="flex-1 overflow-y-auto bg-[#f9fafb] px-8 py-10">
+          {step === 0 && (
+            <GroupDetailsStep name={name} setName={setName} nameError={nameError} setNameError={setNameError} description={description} setDescription={setDescription} labels={labels} setLabels={setLabels} />
+          )}
+          {step === 1 && (
+            <AddCustomersStep customers={customers} setCustomers={setCustomers} />
+          )}
+          {step === 2 && (
+            <ReviewStep name={name} description={description} labels={labels} customers={customers} />
+          )}
+        </main>
 
-        <button type="button" onClick={handleClose} className="p-2 rounded-lg text-[#667085] hover:bg-[#f2f4f7] hover:text-[#344054] transition-colors">
-          <X size={18} />
-        </button>
-      </header>
-
-      {/* Step content */}
-      <main className="flex-1 overflow-y-auto px-8 py-10">
-        {step === 0 && (
-          <GroupDetailsStep name={name} setName={setName} nameError={nameError} setNameError={setNameError} description={description} setDescription={setDescription} labels={labels} setLabels={setLabels} />
-        )}
-        {step === 1 && (
-          <AddCustomersStep customers={customers} setCustomers={setCustomers} />
-        )}
-        {step === 2 && (
-          <ReviewStep name={name} description={description} labels={labels} customers={customers} />
-        )}
-      </main>
-
-      {/* Bottom action bar */}
-      <footer className="shrink-0 flex items-center justify-between px-8 py-4 border-t border-[#eaecf0] bg-white">
-        <button
-          type="button"
-          onClick={step === 0 ? handleClose : () => setStep(s => s - 1)}
-          className="h-10 px-4 flex items-center gap-2 text-sm font-semibold text-[#344054] border border-[#d0d5dd] rounded-lg hover:bg-[#f9fafb]"
-          style={ROBOTO}
-        >
-          {step === 0 ? "Cancel" : <><ArrowLeft size={15} /> Back</>}
-        </button>
-
-        {step < 2 ? (
-          <button type="button" onClick={handleNext} className="h-10 px-5 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] shadow-sm" style={ROBOTO}>
-            Next →
+        {/* Bottom action bar */}
+        <footer className="shrink-0 flex items-center justify-between px-8 py-4 border-t border-[#eaecf0] bg-white">
+          <button
+            type="button"
+            onClick={step === 0 ? handleClose : () => setStep(s => s - 1)}
+            className="h-10 px-4 flex items-center gap-2 text-sm font-semibold text-[#344054] border border-[#d0d5dd] rounded-lg hover:bg-[#f9fafb]"
+            style={ROBOTO}
+          >
+            {step === 0 ? "Cancel" : <><ArrowLeft size={15} /> Back</>}
           </button>
-        ) : (
-          <button type="button" onClick={handleSave} className="h-10 px-5 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] shadow-sm" style={ROBOTO}>
-            <Check size={15} strokeWidth={2.5} />
-            {isEdit ? "Save changes" : "Create Test Group"}
-          </button>
-        )}
-      </footer>
+
+          {step < 2 ? (
+            <button type="button" onClick={handleNext} className="h-10 px-5 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] shadow-sm" style={ROBOTO}>
+              Next →
+            </button>
+          ) : (
+            <button type="button" onClick={handleSave} className="h-10 px-5 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] shadow-sm" style={ROBOTO}>
+              <Check size={15} strokeWidth={2.5} />
+              {isEdit ? "Save changes" : "Create Test Group"}
+            </button>
+          )}
+        </footer>
+      </div>
 
       {showDiscard && (
         <DiscardModal

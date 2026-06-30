@@ -6,7 +6,7 @@ import {
   Palette, Settings, ArrowRight, Plus, Trash2,
   Code2, Sparkles, Clock, FileText, Flag,
   Minimize2, X, Database, GitBranch, Wand2, ChevronUp, ChevronDown,
-  Search, User, ArrowLeft, LayoutGrid, Square, Maximize2, Check, Shuffle,
+  Search, User, ArrowLeft, Maximize2, Check, Shuffle,
   Monitor, Smartphone, Mail, FileDown, Link2, Copy, Globe, Send, UserPlus, Lock,
 } from "lucide-react";
 
@@ -969,22 +969,32 @@ function EmailPreview({
 
 const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
 
-type ContentVersion = "Auto" | "Variant 1" | "Variant 2" | "Variant 3" | "Variant 4";
-const CONTENT_VERSIONS: ContentVersion[] = ["Auto", "Variant 1", "Variant 2", "Variant 3", "Variant 4"];
+const PREVIEW_VARIANTS = ["Variant 1", "Variant 2", "Variant 3", "Variant 4"] as const;
+
+type ContentVersion = "All" | (typeof PREVIEW_VARIANTS)[number];
+const CONTENT_VERSIONS: ContentVersion[] = ["All", ...PREVIEW_VARIANTS];
+
+function getVariantPool(selectedVariants: Set<string>) {
+  return selectedVariants.size > 0
+    ? PREVIEW_VARIANTS.filter((v) => selectedVariants.has(v))
+    : [...PREVIEW_VARIANTS];
+}
 
 function PreviewOptionsPanel({
-  selectedVariant,
-  onSelectVariant,
+  selectedVariants,
+  onSelectAll,
+  onToggleVariant,
   onClose,
   anchorEl,
 }: {
-  selectedVariant: string | null;
-  onSelectVariant: (v: string | null) => void;
+  selectedVariants: Set<string>;
+  onSelectAll: () => void;
+  onToggleVariant: (variant: string) => void;
   onClose: () => void;
   anchorEl: HTMLButtonElement | null;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const isAllMode = selectedVariant === null;
+  const isAllMode = selectedVariants.size === 0;
 
   // Compute position once from the anchor at the time the panel renders
   const panelStyle = useMemo<React.CSSProperties>(() => {
@@ -1019,13 +1029,13 @@ function PreviewOptionsPanel({
       {/* Flat list */}
       <div className="px-2 py-2 flex flex-col gap-0.5">
         {CONTENT_VERSIONS.map((version) => {
-          const isAuto = version === "Auto";
-          const isActive = isAuto ? isAllMode : selectedVariant === version;
+          const isAll = version === "All";
+          const isActive = isAll ? isAllMode : selectedVariants.has(version);
           return (
             <button
               key={version}
               type="button"
-              onClick={() => onSelectVariant(isAuto ? null : (selectedVariant === version ? null : version))}
+              onClick={() => (isAll ? onSelectAll() : onToggleVariant(version))}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${
                 isActive
                   ? "bg-[#f5f4ff] text-[#604dd0] font-medium"
@@ -1048,15 +1058,16 @@ interface PreviewCustomer {
   id: string;
   firstName: string;
   language: string;
+  attributeLabel: string;
   availableSpend: number;
   email: string;
 }
 
 const PREVIEW_CUSTOMERS: PreviewCustomer[] = [
-  { id: "32299512", firstName: "James",  language: "English",    availableSpend: 0,  email: "james@optimove.com" },
-  { id: "88910212", firstName: "Carlos", language: "Spanish",    availableSpend: 5,  email: "carlos@optimove.com" },
-  { id: "64372839", firstName: "Marie",  language: "French",     availableSpend: 52, email: "marie@optimove.com" },
-  { id: "37849537", firstName: "Ivan",   language: "Bulgarian",  availableSpend: 11, email: "ivan@optimove.com" },
+  { id: "32299512", firstName: "James",  language: "English",   attributeLabel: "Language: English",   availableSpend: 0,  email: "james@optimove.com" },
+  { id: "88910212", firstName: "Carlos", language: "Spanish",   attributeLabel: "Language: Spanish",   availableSpend: 5,  email: "carlos@optimove.com" },
+  { id: "64372839", firstName: "Marie",  language: "French",    attributeLabel: "Language: French",    availableSpend: 52, email: "marie@optimove.com" },
+  { id: "37849537", firstName: "Ivan",   language: "Bulgarian", attributeLabel: "Language: Bulgarian", availableSpend: 11, email: "ivan@optimove.com" },
 ];
 
 
@@ -1205,7 +1216,7 @@ function CustomerCard({
         </div>
       </div>
       <div className="bg-white px-6 py-4">
-        <CustomerMetaBadge>{customer.language}</CustomerMetaBadge>
+        <CustomerMetaBadge>{customer.attributeLabel}</CustomerMetaBadge>
       </div>
     </div>
   );
@@ -1214,12 +1225,18 @@ function CustomerCard({
 function SmartPreviewEmailCard({
   customer,
   content,
+  fill = false,
 }: {
   customer: PreviewCustomer;
   content: TemplateContent;
+  fill?: boolean;
 }) {
   return (
-    <div className="bg-white border border-[#d0d5dd] rounded-xl overflow-hidden w-[360px] shrink-0 flex flex-col max-h-[calc(100vh-296px)]">
+    <div
+      className={`bg-white border border-[#d0d5dd] rounded-xl overflow-hidden flex flex-col min-h-0 ${
+        fill ? "w-full h-full flex-1" : "w-[360px] shrink-0 max-h-[calc(100vh-296px)]"
+      }`}
+    >
       <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-5 py-4 shrink-0">
         <div className="flex gap-3 items-start">
           <div className="flex flex-1 gap-2 min-w-0">
@@ -1258,7 +1275,6 @@ function SmartPreviewEmailCard({
 }
 
 type PreviewChannel = "email" | "mobilePush" | "webPopup";
-type PreviewLayout = "single" | "grid";
 
 // ─── Expanded preview (new tab) ───────────────────────────────────────────────
 
@@ -1280,7 +1296,7 @@ function ExpandedPreviewPage({
           <div key={customer.id} className="shrink-0 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium text-[#363f72] bg-[#f8f9fc] border border-[#d5d9eb]">
-                {customer.language}
+                {customer.attributeLabel}
               </span>
               <span className="text-sm text-[#667085]">ID: {customer.id}</span>
             </div>
@@ -1553,7 +1569,7 @@ function SendPreviewDropdown({
                   <div className="flex gap-2 flex-wrap">
                     {customers.map((c) => (
                       <span key={c.id} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-[#363f72] bg-[#f8f9fc] border border-[#d5d9eb]">
-                        {c.language}
+                        {c.attributeLabel}
                       </span>
                     ))}
                   </div>
@@ -1711,13 +1727,25 @@ function SendPreviewDropdown({
 
 // Adapts a Customer from the test groups data model to the PreviewCustomer shape
 // expected by CustomerCard and SmartPreviewEmailCard.
-function adaptToPreview(c: import("../data/testGroupsMock").Customer): PreviewCustomer {
+function adaptToPreview(
+  c: import("../data/testGroupsMock").Customer,
+  attributeName?: string,
+): PreviewCustomer {
+  const preset = PREVIEW_CUSTOMERS.find(p => p.id === c.id);
+  const name = attributeName?.trim() || "Language";
+  const value = c.attributeValue ?? preset?.language ?? c.labels[0] ?? "—";
+  const language =
+    c.attributeValue && c.attributeValue in LANGUAGE_CONTENT
+      ? c.attributeValue
+      : preset?.language ?? "English";
+
   return {
     id: c.id,
     firstName: c.name.split(" ")[0] || "Customer",
-    language: c.labels[0] ?? c.status,
-    availableSpend: 0,
-    email: c.email || `customer${c.id}@optimove.com`,
+    language,
+    attributeLabel: `${name}: ${value}`,
+    availableSpend: preset?.availableSpend ?? 0,
+    email: c.email || preset?.email || `customer${c.id}@optimove.com`,
   };
 }
 
@@ -1735,41 +1763,66 @@ function SmartPreviewView({
     new Set(groups[0]?.customers.slice(0, 4).map((c) => c.id) ?? []),
   );
   const [customerPage, setCustomerPage] = useState(1);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [channel, setChannel] = useState<PreviewChannel>("email");
-  const [layout, setLayout] = useState<PreviewLayout>("grid");
 
-  // Preview Options state — null means Auto (random distribution), string = forced branch
-  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  // Preview Options — empty set = All variants; non-empty = randomize CIDs within selection
+  const [selectedVariants, setSelectedVariants] = useState<Set<string>>(() => new Set());
   const [previewOptionsOpen, setPreviewOptionsOpen] = useState(false);
   const previewOptionsBtnRef = useRef<HTMLButtonElement>(null);
 
-  const isVariantMode = selectedVariant !== null;
+  const isVariantFilterActive = selectedVariants.size > 0;
 
-  // Stable random variant assignment per CID — assigned on first selection, persists until deselected
-  const VARIANT_NAMES = ["Variant 1", "Variant 2", "Variant 3", "Variant 4"] as const;
+  // Stable random variant assignment per CID within the active variant pool
   const [autoVariantMap, setAutoVariantMap] = useState<Record<string, string>>({});
+  const variantPoolKey = [...selectedVariants].sort().join("|");
 
   useEffect(() => {
+    const pool = getVariantPool(selectedVariants);
     setAutoVariantMap((prev) => {
       let changed = false;
-      const next = { ...prev };
+      const next: Record<string, string> = {};
       for (const id of selectedIds) {
-        if (!next[id]) {
-          next[id] = VARIANT_NAMES[Math.floor(Math.random() * VARIANT_NAMES.length)];
+        const current = prev[id];
+        if (current && pool.includes(current)) {
+          next[id] = current;
+        } else {
+          next[id] = pool[Math.floor(Math.random() * pool.length)];
           changed = true;
         }
       }
+      if (!changed && Object.keys(prev).length !== Object.keys(next).length) changed = true;
       return changed ? next : prev;
     });
-  }, [selectedIds]);
+  }, [selectedIds, variantPoolKey]);
 
   const totalPages = 1;
   // When in testGroup mode, use the selected group's customers; otherwise the hardcoded set.
   const activeGroup = groups.find((g) => g.id === selectedGroupId);
   const testGroupCustomers: PreviewCustomer[] = activeGroup
-    ? activeGroup.customers.map(adaptToPreview)
+    ? activeGroup.customers.map(c => adaptToPreview(c, activeGroup.attributeName))
     : PREVIEW_CUSTOMERS;
   const selectedCustomers = testGroupCustomers.filter((c) => selectedIds.has(c.id));
+  const activePreviewCustomer = selectedCustomers[previewIndex];
+  const activeVariantKey = activePreviewCustomer
+    ? (autoVariantMap[activePreviewCustomer.id] ?? PREVIEW_VARIANTS[0])
+    : PREVIEW_VARIANTS[0];
+
+  const toggleVariantSelection = (variant: string) => {
+    setSelectedVariants((prev) => {
+      const next = new Set(prev);
+      if (next.has(variant)) {
+        next.delete(variant);
+      } else {
+        next.add(variant);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setPreviewIndex((i) => Math.min(i, Math.max(0, selectedCustomers.length - 1)));
+  }, [selectedCustomers.length]);
 
   const MAX_PREVIEW_CIDS = 10;
 
@@ -1787,8 +1840,6 @@ function SmartPreviewView({
 
   const channelTabs: { id: PreviewChannel; label: string }[] = [
     { id: "email", label: "Email" },
-    { id: "mobilePush", label: "Mobile Push" },
-    { id: "webPopup", label: "Web Popup" },
   ];
 
   return (
@@ -1827,13 +1878,13 @@ function SmartPreviewView({
               type="button"
               onClick={() => setPreviewOptionsOpen((v) => !v)}
               className={`h-9 px-3 flex items-center gap-1.5 rounded-lg border shadow-sm text-sm font-medium transition-colors ${
-                previewOptionsOpen || isVariantMode
+                previewOptionsOpen || isVariantFilterActive
                   ? "border-[#a4a3f3] bg-[#e6e5fc] text-[#604dd0]"
                   : "border-[#d0d5dd] bg-white text-[#475467] hover:bg-[#f9fafb]"
               }`}
               style={ROBOTO}
             >
-              <SlidersHorizontal size={15} strokeWidth={isVariantMode ? 2 : 1.75} />
+              <SlidersHorizontal size={15} strokeWidth={isVariantFilterActive ? 2 : 1.75} />
               <span>Variants</span>
             </button>
 
@@ -1846,33 +1897,6 @@ function SmartPreviewView({
             >
               <Maximize2 size={18} className="text-[#344054]" />
             </button>
-
-            {/* Divider */}
-            <div className="w-px h-5 bg-[#e4e7ec] shrink-0" />
-
-            {/* Layout toggle */}
-            <div className="flex h-9 rounded-lg border border-[#d0d5dd] shadow-sm overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setLayout("single")}
-                className={`px-3 flex items-center justify-center border-r border-[#d0d5dd] ${
-                  layout === "single" ? "bg-[#e6e5fc]" : "bg-white hover:bg-[#f9fafb]"
-                }`}
-                title="Single view"
-              >
-                <Square size={16} className="text-[#344054]" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayout("grid")}
-                className={`px-3 flex items-center justify-center ${
-                  layout === "grid" ? "bg-[#e6e5fc]" : "bg-white hover:bg-[#f9fafb]"
-                }`}
-                title="Grid view"
-              >
-                <LayoutGrid size={16} className="text-[#344054]" />
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -2015,48 +2039,71 @@ function SmartPreviewView({
 
         {/* Preview area */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#f9fafb]">
-          <div className="flex-1 overflow-x-auto px-6 py-4 min-w-0">
+          <div className="relative flex flex-1 flex-col min-h-0 px-6 py-4">
             {channel === "email" ? (
-              selectedCustomers.length > 0 ? (
-                <div
-                  className={
-                    layout === "grid"
-                      ? "flex flex-nowrap gap-5 items-start"
-                      : "flex justify-center"
-                  }
-                >
-                  {(layout === "single" ? selectedCustomers.slice(0, 1) : selectedCustomers).map(
-                    (customer) => {
-                      // Forced variant overrides all; otherwise use the stable random assignment for this CID
-                      const variantKey = selectedVariant ?? autoVariantMap[customer.id] ?? "Variant 1";
-                      return (
-                        <div key={customer.id} className="flex flex-col gap-3 shrink-0">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold self-start border ${
-                              isVariantMode
-                                ? "text-[#604dd0] bg-[#f5f4ff] border-[#d8d8fa]"
-                                : "text-[#667085] bg-[#f9fafb] border-[#eaecf0]"
-                            }`}
-                            style={ROBOTO}
-                          >
-                            {variantKey}
-                            {!isVariantMode && (
-                              <span className="ml-1 opacity-50 text-[10px]">random</span>
-                            )}
-                          </span>
-                          <SmartPreviewEmailCard
-                            customer={customer}
-                            content={{
-                              ...templateContent,
-                              ...(VARIANT_CONTENT[variantKey] ?? {}),
-                              ...LANGUAGE_CONTENT[customer.language],
-                            }}
-                          />
-                        </div>
-                      );
-                    },
+              activePreviewCustomer ? (
+                <>
+                  {selectedCustomers.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewIndex((i) => (i - 1 + selectedCustomers.length) % selectedCustomers.length)
+                        }
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-10 size-10 flex items-center justify-center rounded-full border border-[#d0d5dd] bg-white shadow-sm hover:bg-[#f9fafb]"
+                        title="Previous preview"
+                      >
+                        <ArrowLeft size={18} className="text-[#344054]" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewIndex((i) => (i + 1) % selectedCustomers.length)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 size-10 flex items-center justify-center rounded-full border border-[#d0d5dd] bg-white shadow-sm hover:bg-[#f9fafb]"
+                        title="Next preview"
+                      >
+                        <ArrowRight size={18} className="text-[#344054]" />
+                      </button>
+                    </>
                   )}
-                </div>
+
+                  <div className="flex flex-1 flex-col min-h-0 items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                          isVariantFilterActive
+                            ? "text-[#604dd0] bg-[#f5f4ff] border-[#d8d8fa]"
+                            : "text-[#667085] bg-white border-[#eaecf0]"
+                        }`}
+                        style={ROBOTO}
+                      >
+                        {activeVariantKey}
+                        <span className="ml-1 opacity-50 text-[10px]">random</span>
+                      </span>
+                      <span className="text-xs text-[#667085]" style={ROBOTO}>
+                        {activePreviewCustomer.attributeLabel} · {activePreviewCustomer.id}
+                      </span>
+                      {selectedCustomers.length > 1 && (
+                        <span className="text-xs text-[#98a2b3]" style={ROBOTO}>
+                          {previewIndex + 1} of {selectedCustomers.length}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-1 w-full min-h-0 max-w-[720px] mx-auto">
+                      <SmartPreviewEmailCard
+                        fill
+                        customer={activePreviewCustomer}
+                        content={{
+                          ...templateContent,
+                          ...(VARIANT_CONTENT[activeVariantKey] ?? {}),
+                          ...LANGUAGE_CONTENT[activePreviewCustomer.language],
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
               ) : (
                 <div className="flex items-center justify-center h-full min-h-[200px]">
                   <p className="text-sm text-[#667085]" style={ROBOTO}>
@@ -2077,8 +2124,9 @@ function SmartPreviewView({
 
       {previewOptionsOpen && (
         <PreviewOptionsPanel
-          selectedVariant={selectedVariant}
-          onSelectVariant={setSelectedVariant}
+          selectedVariants={selectedVariants}
+          onSelectAll={() => setSelectedVariants(new Set())}
+          onToggleVariant={toggleVariantSelection}
           onClose={() => setPreviewOptionsOpen(false)}
           anchorEl={previewOptionsBtnRef.current}
         />

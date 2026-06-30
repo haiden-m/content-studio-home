@@ -5,6 +5,7 @@ export interface Customer {
   country: string;
   status: "Active" | "Inactive" | "Churned";
   labels: string[];
+  attributeValue?: string;
 }
 
 export interface TestGroup {
@@ -13,6 +14,7 @@ export interface TestGroup {
   description: string;
   labels: string[];
   customers: Customer[];
+  attributeName?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

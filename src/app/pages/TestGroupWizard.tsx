@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  ArrowLeft, X, Check, Plus, Trash2, Search, Upload,
-  CloudUpload, AlertCircle, CheckCircle2, AlertTriangle,
+  ArrowLeft, X, Check, Plus, Trash2, Search, Sparkles,
+  AlertCircle, CheckCircle2, AlertTriangle,
   ChevronDown, Building2, Users, Star, Pin,
 } from "lucide-react";
 import { type TestGroup, type Customer, CUSTOMER_PROFILES, ALL_LABELS, LABEL_COLORS } from "../data/testGroupsMock";
@@ -9,8 +9,56 @@ import { LabelChip } from "./TestGroups";
 import { ContentStudioSidebar, TopNav } from "../shared";
 
 const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
-const MAX_CUSTOMERS = 500;
+const MAX_CUSTOMERS = 10;
 const VALID_CID = /^\d{8}$/;
+const ATTRIBUTE_LANGUAGES = ["English", "Spanish", "French", "Bulgarian"] as const;
+
+const randomLanguage = () =>
+  ATTRIBUTE_LANGUAGES[Math.floor(Math.random() * ATTRIBUTE_LANGUAGES.length)];
+
+function emptyPasteRows() {
+  return {
+    cells: Array(MAX_CUSTOMERS).fill(""),
+    attributes: Array(MAX_CUSTOMERS).fill(""),
+  };
+}
+
+function pasteRowsFromCustomers(customers: Customer[]) {
+  const { cells, attributes } = emptyPasteRows();
+  customers.forEach((c, i) => {
+    if (i < MAX_CUSTOMERS) {
+      cells[i] = c.id;
+      attributes[i] = c.attributeValue ?? "";
+    }
+  });
+  return { cells, attributes };
+}
+
+function customersFromPasteRows(
+  cells: string[],
+  attributes: string[],
+  existingCustomers: Customer[],
+): Customer[] {
+  const rows: Customer[] = [];
+  cells.forEach((cell, i) => {
+    const id = cell.trim();
+    if (!id || !VALID_CID.test(id)) return;
+    if (rows.some(c => c.id === id)) return;
+    const existing = existingCustomers.find(c => c.id === id);
+    const profile = CUSTOMER_PROFILES.find(c => c.id === id);
+    const base = existing ?? profile ?? {
+      id,
+      name: `Customer ${id}`,
+      email: "",
+      country: "—",
+      status: "Active" as const,
+      labels: [],
+    };
+    const attributeValue = attributes[i]?.trim();
+    rows.push(attributeValue ? { ...base, attributeValue } : base);
+  });
+  return rows;
+}
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
 
@@ -127,18 +175,6 @@ function LabelTagInput({ selected, onChange }: { selected: string[]; onChange: (
 
 // ─── Step 1: Group Details ────────────────────────────────────────────────────
 
-function parsePastedCIDs(raw: string, existing: string[]) {
-  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
-  const seen = new Set<string>();
-  const existingSet = new Set(existing);
-  const valid: string[] = [], invalid: string[] = [], duplicates: string[] = [];
-  for (const line of lines) {
-    if (!VALID_CID.test(line)) { invalid.push(line); continue; }
-    if (existingSet.has(line) || seen.has(line)) { duplicates.push(line); continue; }
-    seen.add(line); valid.push(line);
-  }
-  return { valid, invalid, duplicates };
-}
 
 function GroupDetailsStep({
   name, setName, nameError, setNameError,
@@ -200,7 +236,7 @@ function GroupDetailsStep({
 
 // ─── Step 2: Add Customers ────────────────────────────────────────────────────
 
-type CustomerTab = "paste" | "search" | "upload";
+type CustomerTab = "paste" | "search";
 
 function StatusChip({ status }: { status: Customer["status"] }) {
   const map = {
@@ -211,30 +247,220 @@ function StatusChip({ status }: { status: Customer["status"] }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${map[status]}`}>{status}</span>;
 }
 
-function PasteCIDsTab({ existingIds, onAdd }: { existingIds: string[]; onAdd: (ids: string[]) => void }) {
-  const [raw, setRaw] = useState("");
-  const parsed = parsePastedCIDs(raw, existingIds);
+function PasteCIDsTab({
+  cells,
+  attributes,
+  attributeName,
+  onCellsChange,
+  onAttributesChange,
+  onAttributeNameChange,
+}: {
+  cells: string[];
+  attributes: string[];
+  attributeName: string;
+  onCellsChange: (cells: string[]) => void;
+  onAttributesChange: (attributes: string[]) => void;
+  onAttributeNameChange: (name: string) => void;
+}) {
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const nameRefs  = useRef<(HTMLInputElement | null)[]>([]);
+
+  const updateCell = (idx: number, val: string) => {
+    onCellsChange(cells.map((c, i) => (i === idx ? val : c)));
+  };
+
+  const updateAttribute = (idx: number, val: string) => {
+    onAttributesChange(attributes.map((a, i) => (i === idx ? val : a)));
+  };
+
+  const clearCell = (idx: number) => {
+    onCellsChange(cells.map((c, i) => (i === idx ? "" : c)));
+    onAttributesChange(attributes.map((a, i) => (i === idx ? "" : a)));
+    inputRefs.current[idx]?.focus();
+  };
+
+  type RowStatus = "empty" | "valid" | "invalid" | "duplicate";
+
+  const statuses: RowStatus[] = cells.map((val, idx) => {
+    const v = val.trim();
+    if (!v) return "empty";
+    if (!VALID_CID.test(v)) return "invalid";
+    if (cells.some((r, i) => i !== idx && r.trim() === v)) return "duplicate";
+    return "valid";
+  });
+
+  const validIds = cells.filter((v, i) => statuses[i] === "valid").map(v => v.trim());
+  const invalidCount   = statuses.filter(s => s === "invalid").length;
+  const duplicateCount = statuses.filter(s => s === "duplicate").length;
+
+  const statusPill: Record<Exclude<RowStatus, "empty">, { label: string; cls: string }> = {
+    valid:     { label: "Valid",     cls: "text-[#067647] bg-[#ecfdf3] border-[#abefc6]" },
+    invalid:   { label: "Invalid",   cls: "text-[#d92d20] bg-[#fef3f2] border-[#fda29b]" },
+    duplicate: { label: "Duplicate", cls: "text-[#b54708] bg-[#fffaeb] border-[#fedf89]" },
+  };
+
+  const hasAnyInput = cells.some(v => v.trim());
+
+  const autoFill = () => {
+    const takenIds = new Set(cells.map(c => c.trim()).filter(Boolean));
+    const available = CUSTOMER_PROFILES.filter(p => !takenIds.has(p.id)).slice(0, MAX_CUSTOMERS);
+    const newCells = Array(MAX_CUSTOMERS).fill("");
+    const newAttributes = Array(MAX_CUSTOMERS).fill("");
+    available.forEach((p, i) => { newCells[i] = p.id; newAttributes[i] = randomLanguage(); });
+    onAttributeNameChange("Language");
+    onCellsChange(newCells);
+    onAttributesChange(newAttributes);
+  };
+
   return (
-    <div className="flex flex-col gap-4">
-      <textarea
-        value={raw} onChange={e => setRaw(e.target.value)}
-        placeholder={"Paste one Customer ID per line...\n\n32299512\n88910212\n64372839"}
-        rows={7}
-        className="w-full px-3 py-2.5 border border-[#d0d5dd] rounded-lg text-sm text-[#101828] placeholder:text-[#667085] focus:outline-none focus:ring-2 focus:ring-[#7068de]/20 focus:border-[#7068de] resize-none font-mono"
-      />
-      {raw.trim() && (
-        <div className="flex flex-wrap gap-2">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ecfdf3] border border-[#abefc6] text-xs font-medium text-[#067647]">
-            <CheckCircle2 size={12} /> {parsed.valid.length} valid
-          </span>
-          {parsed.invalid.length > 0 && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#fef3f2] border border-[#fda29b] text-xs font-medium text-[#d92d20]"><AlertCircle size={12} /> {parsed.invalid.length} invalid</span>}
-          {parsed.duplicates.length > 0 && <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#fffaeb] border border-[#fedf89] text-xs font-medium text-[#b54708]"><AlertTriangle size={12} /> {parsed.duplicates.length} duplicate</span>}
-        </div>
-      )}
-      {parsed.valid.length > 0 && (
-        <button type="button" onClick={() => { onAdd(parsed.valid); setRaw(""); }} className="h-9 px-4 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] self-start" style={ROBOTO}>
-          <Plus size={15} strokeWidth={2} /> Add {parsed.valid.length} Customer ID{parsed.valid.length !== 1 ? "s" : ""}
+    <div className="flex flex-col gap-3">
+      {/* Toolbar */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={autoFill}
+          className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-medium text-[#604dd0] border border-[#d8d8fa] bg-[#f5f4ff] rounded-lg hover:bg-[#ede9fe] transition-colors"
+          style={ROBOTO}
+        >
+          <Sparkles size={11} strokeWidth={2} /> Auto-fill
         </button>
+      </div>
+
+      {/* Editable table */}
+      <div className="border border-[#eaecf0] rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="grid grid-cols-[28px_1fr_1fr_88px_28px] bg-[#f9fafb] border-b border-[#eaecf0]">
+          <div className="px-3 py-2 text-xs font-medium text-[#475467] border-r border-[#eaecf0]" style={ROBOTO}>#</div>
+          <div className="px-3 py-2 text-xs font-medium text-[#475467] border-r border-[#eaecf0]" style={ROBOTO}>Customer ID</div>
+          <div className="border-r border-[#eaecf0]">
+            <input
+              type="text"
+              value={attributeName}
+              onChange={e => onAttributeNameChange(e.target.value)}
+              placeholder="Attribute name"
+              className="w-full h-full px-3 py-2 text-xs font-medium text-[#475467] focus:outline-none focus:bg-white bg-transparent placeholder:text-[#98a2b3]"
+              style={ROBOTO}
+            />
+          </div>
+          <div className="px-3 py-2 text-xs font-medium text-[#475467] border-r border-[#eaecf0]" style={ROBOTO}>Status</div>
+          <div className="px-3 py-2" />
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y divide-[#eaecf0]">
+          {cells.map((val, idx) => {
+            const status = statuses[idx];
+            const trimmed = val.trim();
+            const isActive = !!trimmed;
+
+            const rowBg =
+              status === "valid"     ? "bg-[#f6fef9]" :
+              status === "invalid"   ? "bg-[#fffafa]" :
+              status === "duplicate" ? "bg-[#fffdf5]" :
+              "";
+
+            return (
+              <div key={idx} className={`grid grid-cols-[28px_1fr_1fr_88px_28px] items-stretch transition-colors hover:bg-[#fafafa] ${rowBg}`}>
+
+                {/* Row number */}
+                <div className="px-2 flex items-center justify-end border-r border-[#eaecf0] text-[11px] text-[#c4c9d4] font-mono select-none">
+                  {idx + 1}
+                </div>
+
+                {/* CID input */}
+                <div className="border-r border-[#eaecf0]">
+                  <input
+                    ref={el => { inputRefs.current[idx] = el; }}
+                    type="text"
+                    value={val}
+                    onChange={e => updateCell(idx, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        inputRefs.current[Math.min(idx + 1, MAX_CUSTOMERS - 1)]?.focus();
+                      }
+                      if (e.key === "Tab" && !e.shiftKey) {
+                        e.preventDefault();
+                        nameRefs.current[idx]?.focus();
+                      }
+                    }}
+                    placeholder="00000000"
+                    maxLength={8}
+                    className={`w-full h-full px-3 py-2.5 text-sm font-mono focus:outline-none bg-transparent placeholder:text-[#dde1e8] ${
+                      isActive ? "text-[#101828]" : "text-[#667085]"
+                    }`}
+                  />
+                </div>
+
+                {/* Attribute — editable, auto-filled with random language */}
+                <div className="border-r border-[#eaecf0]">
+                  <input
+                    ref={el => { nameRefs.current[idx] = el; }}
+                    type="text"
+                    value={attributes[idx]}
+                    onChange={e => updateAttribute(idx, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey)) {
+                        e.preventDefault();
+                        inputRefs.current[Math.min(idx + 1, MAX_CUSTOMERS - 1)]?.focus();
+                      }
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        inputRefs.current[idx]?.focus();
+                      }
+                    }}
+                    placeholder={isActive ? "—" : ""}
+                    className="w-full h-full px-3 py-2.5 text-xs focus:outline-none bg-transparent placeholder:text-[#d0d5dd] text-[#475467]"
+                    style={ROBOTO}
+                  />
+                </div>
+
+                {/* Status */}
+                <div className="px-3 py-2.5 flex items-center border-r border-[#eaecf0]">
+                  {status !== "empty" && (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-medium ${statusPill[status].cls}`}>
+                      {statusPill[status].label}
+                    </span>
+                  )}
+                </div>
+
+                {/* Clear */}
+                <div className="flex items-center justify-center">
+                  {isActive && (
+                    <button
+                      type="button"
+                      onClick={() => clearCell(idx)}
+                      className="size-5 flex items-center justify-center text-[#d0d5dd] hover:text-[#d92d20] transition-colors"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Footer */}
+      {hasAnyInput && (
+        <div className="flex gap-3">
+          {validIds.length > 0 && (
+            <span className="flex items-center gap-1 text-xs text-[#067647]" style={ROBOTO}>
+              <CheckCircle2 size={11} /> {validIds.length} valid
+            </span>
+          )}
+          {invalidCount > 0 && (
+            <span className="flex items-center gap-1 text-xs text-[#d92d20]" style={ROBOTO}>
+              <AlertCircle size={11} /> {invalidCount} invalid
+            </span>
+          )}
+          {duplicateCount > 0 && (
+            <span className="flex items-center gap-1 text-xs text-[#b54708]" style={ROBOTO}>
+              <AlertTriangle size={11} /> {duplicateCount} duplicate
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
@@ -261,7 +487,7 @@ function SearchProfilesTab({ existingIds, onAdd }: { existingIds: string[]; onAd
         <div className="grid grid-cols-[auto_1fr_100px_1fr_80px_auto] bg-[#f9fafb] border-b border-[#eaecf0]">
           {["", "Name", "ID", "Email", "Country", "Status"].map((h, i) => <div key={i} className="px-3 py-2 text-xs font-medium text-[#475467]" style={ROBOTO}>{h}</div>)}
         </div>
-        <div className="max-h-52 overflow-y-auto">
+        <div className="max-h-[400px] overflow-y-auto">
           {results.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-[#667085]" style={ROBOTO}>No matching profiles</div>
           ) : results.map(c => (
@@ -292,74 +518,6 @@ function SearchProfilesTab({ existingIds, onAdd }: { existingIds: string[]; onAd
   );
 }
 
-function UploadCSVTab({ existingIds, onAdd }: { existingIds: string[]; onAdd: (ids: string[]) => void }) {
-  const [phase, setPhase] = useState<"idle" | "uploading" | "preview">("idle");
-  const [progress, setProgress] = useState(0);
-  const [dragOver, setDragOver] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const PREVIEW = [
-    { id: "32299512", status: "valid" as const },
-    { id: "88910212", status: "valid" as const },
-    { id: "64372839", status: "valid" as const },
-    { id: "37849537", status: "duplicate" as const },
-    { id: "BADROW01", status: "invalid" as const },
-    { id: "59375833", status: "valid" as const },
-  ];
-  const [rows, setRows] = useState(PREVIEW);
-  const reset = () => { setPhase("idle"); setRows(PREVIEW); if (fileRef.current) fileRef.current.value = ""; };
-  const simulate = () => {
-    setPhase("uploading"); setProgress(0);
-    let p = 0;
-    const iv = setInterval(() => { p += Math.random() * 30; if (p >= 100) { clearInterval(iv); setTimeout(() => { setPhase("preview"); setRows(PREVIEW); }, 200); } setProgress(Math.min(p, 100)); }, 120);
-  };
-  const statusColors = { valid: "text-[#067647] bg-[#ecfdf3] border-[#abefc6]", duplicate: "text-[#b54708] bg-[#fffaeb] border-[#fedf89]", invalid: "text-[#d92d20] bg-[#fef3f2] border-[#fda29b]" };
-  const validIds = rows.filter(r => r.status === "valid" && !existingIds.includes(r.id)).map(r => r.id);
-
-  if (phase === "idle") return (
-    <div onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files[0]) simulate(); }} onClick={() => fileRef.current?.click()}
-      className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl px-6 py-12 cursor-pointer transition-colors ${dragOver ? "border-[#7068de] bg-[#f4f3ff]" : "border-[#d0d5dd] hover:border-[#7068de] hover:bg-[#fafaff]"}`}>
-      <div className="size-12 rounded-full bg-[#e6e5fc] flex items-center justify-center"><CloudUpload size={24} className="text-[#604dd0]" /></div>
-      <p className="text-sm font-semibold text-[#344054]" style={ROBOTO}>Drop CSV here or <span className="text-[#7068de]">click to browse</span></p>
-      <p className="text-xs text-[#667085]" style={ROBOTO}>One Customer ID per row.</p>
-      <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={simulate} />
-    </div>
-  );
-
-  if (phase === "uploading") return (
-    <div className="flex flex-col items-center gap-4 py-12">
-      <div className="w-full max-w-xs bg-[#eaecf0] rounded-full h-2"><div className="bg-[#7068de] h-2 rounded-full transition-all duration-200" style={{ width: `${progress}%` }} /></div>
-      <p className="text-sm text-[#667085]" style={ROBOTO}>Processing CSV… {Math.round(progress)}%</p>
-    </div>
-  );
-
-  const counts = { valid: rows.filter(r => r.status === "valid").length, duplicate: rows.filter(r => r.status === "duplicate").length, invalid: rows.filter(r => r.status === "invalid").length };
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
-        <span className={`px-2.5 py-1 rounded-full border text-xs font-medium ${statusColors.valid}`}>✓ {counts.valid} valid</span>
-        {counts.duplicate > 0 && <span className={`px-2.5 py-1 rounded-full border text-xs font-medium ${statusColors.duplicate}`}>⊘ {counts.duplicate} duplicate</span>}
-        {counts.invalid > 0 && <span className={`px-2.5 py-1 rounded-full border text-xs font-medium ${statusColors.invalid}`}>✗ {counts.invalid} invalid</span>}
-      </div>
-      <div className="border border-[#eaecf0] rounded-xl overflow-hidden max-h-52 overflow-y-auto">
-        {rows.map(row => (
-          <div key={row.id} className="flex items-center justify-between px-4 py-2.5 border-b border-[#eaecf0] last:border-b-0 hover:bg-[#f9fafb]">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-mono text-[#344054]">{row.id}</span>
-              <span className={`px-2 py-0.5 rounded-full border text-[10px] font-medium ${statusColors[row.status]}`}>{row.status}</span>
-            </div>
-            {row.status !== "valid" && <button type="button" onClick={() => setRows(p => p.filter(r => r.id !== row.id))} className="text-[#667085] hover:text-[#d92d20]"><Trash2 size={13} /></button>}
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={() => { onAdd(validIds); reset(); }} disabled={validIds.length === 0} className="h-9 px-4 flex items-center gap-2 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] disabled:opacity-40" style={ROBOTO}>
-          <Upload size={14} /> Import {validIds.length} valid row{validIds.length !== 1 ? "s" : ""}
-        </button>
-        <button type="button" onClick={reset} className="h-9 px-3 text-sm text-[#344054] border border-[#d0d5dd] rounded-lg hover:bg-[#f9fafb]" style={ROBOTO}>Cancel</button>
-      </div>
-    </div>
-  );
-}
 
 function CustomerTable({ customers, onRemove, onAddLabel, onRemoveLabel }: {
   customers: Customer[];
@@ -413,74 +571,66 @@ function CustomerTable({ customers, onRemove, onAddLabel, onRemoveLabel }: {
   );
 }
 
-function AddCustomersStep({ customers, setCustomers }: { customers: Customer[]; setCustomers: (fn: (p: Customer[]) => Customer[]) => void }) {
+function AddCustomersStep({
+  customers,
+  setCustomers,
+  pasteCells,
+  setPasteCells,
+  pasteAttributes,
+  setPasteAttributes,
+  attributeName,
+  setAttributeName,
+}: {
+  customers: Customer[];
+  setCustomers: (fn: (p: Customer[]) => Customer[]) => void;
+  pasteCells: string[];
+  setPasteCells: (cells: string[]) => void;
+  pasteAttributes: string[];
+  setPasteAttributes: (attributes: string[]) => void;
+  attributeName: string;
+  setAttributeName: (name: string) => void;
+}) {
   const [tab, setTab] = useState<CustomerTab>("paste");
   const existingIds = customers.map(c => c.id);
-  const pct = Math.min((customers.length / MAX_CUSTOMERS) * 100, 100);
-  const atLimit = customers.length >= MAX_CUSTOMERS;
-
-  const addByIds = useCallback((ids: string[]) => {
-    const fresh = ids.filter(id => !existingIds.includes(id)).slice(0, MAX_CUSTOMERS - customers.length);
-    const newCustomers = fresh.map(id => {
-      const p = CUSTOMER_PROFILES.find(c => c.id === id);
-      return p ?? { id, name: `Customer ${id}`, email: "", country: "—", status: "Active" as const, labels: [] };
-    });
-    setCustomers(prev => [...prev, ...newCustomers]);
-  }, [customers, existingIds, setCustomers]);
 
   const addProfiles = useCallback((profiles: Customer[]) => {
     const fresh = profiles.filter(p => !existingIds.includes(p.id));
-    setCustomers(prev => [...prev, ...fresh].slice(0, MAX_CUSTOMERS));
-  }, [existingIds, setCustomers]);
+    setCustomers(prev => {
+      const next = [...prev, ...fresh].slice(0, MAX_CUSTOMERS);
+      const pasted = pasteRowsFromCustomers(next);
+      setPasteCells(pasted.cells);
+      setPasteAttributes(pasted.attributes);
+      return next;
+    });
+  }, [existingIds, setCustomers, setPasteCells, setPasteAttributes]);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-xl font-semibold text-[#101828] mb-1" style={ROBOTO}>Add Customers</h2>
-        <p className="text-sm text-[#475467]" style={ROBOTO}>Add Customer IDs by pasting, searching profiles, or uploading a CSV.</p>
+        <p className="text-sm text-[#475467]" style={ROBOTO}>Add Customer IDs by pasting or searching profiles.</p>
       </div>
 
-      {/* Progress */}
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className={`text-xs font-medium ${atLimit ? "text-[#d92d20]" : "text-[#667085]"}`} style={ROBOTO}>
-            {customers.length} / {MAX_CUSTOMERS} Customer IDs
-          </span>
-          {customers.length > 0 && (
-            <button type="button" onClick={() => setCustomers(() => [])} className="text-xs text-[#667085] hover:text-[#d92d20]" style={ROBOTO}>Clear all</button>
-          )}
-        </div>
-        <div className="w-full h-1.5 bg-[#eaecf0] rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${atLimit ? "bg-[#d92d20]" : "bg-[#7068de]"}`} style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-
-      {/* Tabs */}
       <div>
-        <div className="flex border-b border-[#eaecf0] mb-5">
-          {([["paste", "Paste CIDs"], ["search", "Search Profiles"], ["upload", "Upload CSV"]] as [CustomerTab, string][]).map(([id, label]) => (
+        <div className="flex items-center border-b border-[#eaecf0] mb-5">
+          {([["paste", "Paste CIDs"], ["search", "Search Profiles"]] as [CustomerTab, string][]).map(([id, label]) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === id ? "border-[#7068de] text-[#604dd0]" : "border-transparent text-[#667085] hover:text-[#344054]"}`} style={ROBOTO}>
               {label}
             </button>
           ))}
         </div>
-        {tab === "paste"  && <PasteCIDsTab  existingIds={existingIds} onAdd={addByIds}    />}
-        {tab === "search" && <SearchProfilesTab existingIds={existingIds} onAdd={addProfiles} />}
-        {tab === "upload" && <UploadCSVTab   existingIds={existingIds} onAdd={addByIds}    />}
-      </div>
-
-      {/* Customer table */}
-      {customers.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-[#344054]" style={ROBOTO}>Added profiles ({customers.length})</p>
-          <CustomerTable
-            customers={customers}
-            onRemove={id => setCustomers(p => p.filter(c => c.id !== id))}
-            onAddLabel={(id, label) => setCustomers(p => p.map(c => c.id === id ? { ...c, labels: [...c.labels, label] } : c))}
-            onRemoveLabel={(id, label) => setCustomers(p => p.map(c => c.id === id ? { ...c, labels: c.labels.filter(l => l !== label) } : c))}
+        {tab === "paste" && (
+          <PasteCIDsTab
+            cells={pasteCells}
+            attributes={pasteAttributes}
+            attributeName={attributeName}
+            onCellsChange={setPasteCells}
+            onAttributesChange={setPasteAttributes}
+            onAttributeNameChange={setAttributeName}
           />
-        </div>
-      )}
+        )}
+        {tab === "search" && <SearchProfilesTab existingIds={existingIds} onAdd={addProfiles} />}
+      </div>
     </div>
   );
 }
@@ -582,6 +732,14 @@ export default function TestGroupWizardPage({
 
   // Step 2 state
   const [customers, setCustomers] = useState<Customer[]>(group?.customers ?? []);
+  const initialPaste = pasteRowsFromCustomers(group?.customers ?? []);
+  const [pasteCells, setPasteCells] = useState<string[]>(initialPaste.cells);
+  const [pasteAttributes, setPasteAttributes] = useState<string[]>(initialPaste.attributes);
+  const [attributeName, setAttributeName] = useState(group?.attributeName ?? "Attribute name");
+
+  const syncCustomersFromPaste = useCallback(() => {
+    setCustomers(prev => customersFromPasteRows(pasteCells, pasteAttributes, prev));
+  }, [pasteCells, pasteAttributes]);
 
   const isDirty = name !== (group?.name ?? "") ||
     description !== (group?.description ?? "") ||
@@ -594,17 +752,20 @@ export default function TestGroupWizardPage({
 
   const handleNext = () => {
     if (step === 0 && !name.trim()) { setNameError(true); return; }
+    if (step === 1) syncCustomersFromPaste();
     setStep(s => Math.min(s + 1, 2));
   };
 
   const handleSave = () => {
     if (!name.trim()) { setStep(0); setNameError(true); return; }
+    const syncedCustomers = customersFromPasteRows(pasteCells, pasteAttributes, customers);
     const saved: TestGroup = {
       id: group?.id ?? `tg-${Date.now()}`,
       name: name.trim(),
       description: description.trim(),
       labels,
-      customers,
+      customers: syncedCustomers,
+      attributeName: attributeName.trim() || undefined,
       createdBy: group?.createdBy ?? "Haiden McGill",
       createdAt: group?.createdAt ?? new Date().toISOString().slice(0, 10),
       updatedAt: new Date().toISOString().slice(0, 10),
@@ -638,7 +799,16 @@ export default function TestGroupWizardPage({
             <GroupDetailsStep name={name} setName={setName} nameError={nameError} setNameError={setNameError} description={description} setDescription={setDescription} labels={labels} setLabels={setLabels} />
           )}
           {step === 1 && (
-            <AddCustomersStep customers={customers} setCustomers={setCustomers} />
+            <AddCustomersStep
+              customers={customers}
+              setCustomers={setCustomers}
+              pasteCells={pasteCells}
+              setPasteCells={setPasteCells}
+              pasteAttributes={pasteAttributes}
+              setPasteAttributes={setPasteAttributes}
+              attributeName={attributeName}
+              setAttributeName={setAttributeName}
+            />
           )}
           {step === 2 && (
             <ReviewStep name={name} description={description} labels={labels} customers={customers} />

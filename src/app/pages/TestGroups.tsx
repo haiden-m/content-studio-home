@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Plus, Search, Star, Pin, MoreHorizontal, Trash2, Copy,
   PenLine, Building2, Users, Sparkles, X, Check, ChevronDown,
-  SlidersHorizontal, Tag,
+  Tag,
 } from "lucide-react";
 import { ContentStudioSidebar, TopNav } from "../shared";
 import {
@@ -481,8 +481,6 @@ export default function TestGroupsPage({
   };
   const [search, setSearch] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
-  const [sizeFilter, setSizeFilter] = useState<"" | "small" | "medium" | "large">("");
-  const [createdByFilter, setCreatedByFilter] = useState("");
   const [sort, setSort] = useState<"updated" | "alpha" | "usage">("updated");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [wizardTarget, setWizardTarget] = useState<TestGroup | null>(null);
@@ -501,10 +499,6 @@ export default function TestGroupsPage({
         if (!hit) return false;
       }
       if (labelFilter.length > 0 && !labelFilter.every((l) => g.labels.includes(l))) return false;
-      if (sizeFilter === "small"  && g.customers.length >= 10) return false;
-      if (sizeFilter === "medium" && (g.customers.length < 10 || g.customers.length > 50)) return false;
-      if (sizeFilter === "large"  && g.customers.length <= 50) return false;
-      if (createdByFilter && g.createdBy !== createdByFilter) return false;
       return true;
     })
     .sort((a, b) => {
@@ -586,7 +580,7 @@ export default function TestGroupsPage({
   const togglePin = (id: string) =>
     setGroups((prev) => prev.map((g) => g.id === id ? { ...g, isPinned: !g.isPinned } : g));
 
-  const activeFilters = labelFilter.length > 0 || sizeFilter !== "" || createdByFilter !== "";
+  const activeFilters = labelFilter.length > 0;
 
   // Full-page wizard replaces the grid when open
   if (wizardOpen) {
@@ -654,55 +648,22 @@ export default function TestGroupsPage({
               {/* Label filter */}
               <LabelFilterPopover selected={labelFilter} onChange={setLabelFilter} />
 
-              {/* Size filter */}
-              <select
-                value={sizeFilter}
-                onChange={(e) => setSizeFilter(e.target.value as typeof sizeFilter)}
-                className={`h-9 px-3 rounded-lg border text-sm font-medium focus:outline-none transition-colors ${
-                  sizeFilter ? "border-[#7068de] bg-[#e6e5fc] text-[#604dd0]" : "border-[#d0d5dd] bg-white text-[#344054]"
-                }`}
-                style={ROBOTO}
-              >
-                <option value="">Size</option>
-                <option value="small">Small (&lt; 10)</option>
-                <option value="medium">Medium (10–50)</option>
-                <option value="large">Large (50+)</option>
-              </select>
-
-              {/* Created By filter */}
-              <select
-                value={createdByFilter}
-                onChange={(e) => setCreatedByFilter(e.target.value)}
-                className={`h-9 px-3 rounded-lg border text-sm font-medium focus:outline-none transition-colors ${
-                  createdByFilter ? "border-[#7068de] bg-[#e6e5fc] text-[#604dd0]" : "border-[#d0d5dd] bg-white text-[#344054]"
-                }`}
-                style={ROBOTO}
-              >
-                <option value="">Created By</option>
-                {[...new Set(INITIAL_TEST_GROUPS.map((g) => g.createdBy))].map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-
               {/* Sort */}
-              <div className="flex items-center gap-1.5">
-                <SlidersHorizontal size={14} className="text-[#667085]" />
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as typeof sort)}
-                  className="h-9 px-2 rounded-lg border border-[#d0d5dd] bg-white text-sm text-[#344054] focus:outline-none"
-                  style={ROBOTO}
-                >
-                  <option value="updated">Recently updated</option>
-                  <option value="alpha">Alphabetical</option>
-                  <option value="usage">Most used</option>
-                </select>
-              </div>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as typeof sort)}
+                className="h-9 px-2 rounded-lg border border-[#d0d5dd] bg-white text-sm text-[#344054] focus:outline-none"
+                style={ROBOTO}
+              >
+                <option value="updated">Recently updated</option>
+                <option value="alpha">Alphabetical</option>
+                <option value="usage">Most used</option>
+              </select>
 
               {activeFilters && (
                 <button
                   type="button"
-                  onClick={() => { setLabelFilter([]); setSizeFilter(""); setCreatedByFilter(""); }}
+                  onClick={() => setLabelFilter([])}
                   className="text-xs text-[#604dd0] font-medium hover:underline whitespace-nowrap"
                   style={ROBOTO}
                 >

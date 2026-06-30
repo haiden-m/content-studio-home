@@ -623,21 +623,10 @@ export default function TestGroupWizardPage({
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav />
 
-        {/* Wizard sub-header: breadcrumb + stepper + close */}
+        {/* Wizard sub-header: stepper + close */}
         <div className="shrink-0 flex items-center justify-between px-8 py-4 border-b border-[#eaecf0] bg-white">
-          <div className="flex items-center gap-2" style={ROBOTO}>
-            <button type="button" onClick={handleClose} className="flex items-center gap-1.5 text-sm text-[#667085] hover:text-[#344054] transition-colors">
-              <ArrowLeft size={15} />
-              Test Groups
-            </button>
-            <span className="text-[#d0d5dd]">/</span>
-            <span className="text-sm font-medium text-[#101828]">
-              {isEdit ? `Edit: ${group.name}` : "New Test Group"}
-            </span>
-          </div>
-
+          <div className="size-[34px]" />
           <Stepper current={step} />
-
           <button type="button" onClick={handleClose} className="p-2 rounded-lg text-[#667085] hover:bg-[#f2f4f7] hover:text-[#344054] transition-colors">
             <X size={18} />
           </button>

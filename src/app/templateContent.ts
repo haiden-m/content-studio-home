@@ -18,7 +18,7 @@ export interface TemplateContent {
 export const DEFAULT_TEMPLATE_CONTENT: TemplateContent = {
   heroHeadline: "CHAMPIONS LEAGUE WEEKEND",
   heroBadge: "MATCH WEEKEND",
-  bodyHeading: "🔥 Your Chance to Win BIG! ⚽️",
+  bodyHeading: "🔥 {{ customer.firstName }}, your chance to Win BIG! ⚽️",
   bodyCopy:
     "Champions league games this weekend mean more opportunities to watch your favourite team and win Big!",
   ctaText: "Place Bet",

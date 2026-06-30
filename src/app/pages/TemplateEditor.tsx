@@ -1124,14 +1124,6 @@ const VARIANT_CONTENT: Record<string, Partial<TemplateContent>> = {
   },
 };
 
-// Simulated random variant distribution — one variant per CID as if randomly
-// assigned during a real send. Used when no explicit CVO override is active.
-const CUSTOMER_VARIANT_MAP: Record<string, string> = {
-  "32299512": "Variant 1",
-  "88910212": "Variant 3",
-  "64372839": "Variant 2",
-  "37849537": "Variant 4",
-};
 
 function PreviewRadio({
   checked,
@@ -1746,12 +1738,30 @@ function SmartPreviewView({
   const [channel, setChannel] = useState<PreviewChannel>("email");
   const [layout, setLayout] = useState<PreviewLayout>("grid");
 
-  // Preview Options state — null means random distribution (All), string = forced branch
+  // Preview Options state — null means Auto (random distribution), string = forced branch
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [previewOptionsOpen, setPreviewOptionsOpen] = useState(false);
   const previewOptionsBtnRef = useRef<HTMLButtonElement>(null);
 
   const isVariantMode = selectedVariant !== null;
+
+  // Stable random variant assignment per CID — assigned on first selection, persists until deselected
+  const VARIANT_NAMES = ["Variant 1", "Variant 2", "Variant 3", "Variant 4"] as const;
+  const [autoVariantMap, setAutoVariantMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setAutoVariantMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of selectedIds) {
+        if (!next[id]) {
+          next[id] = VARIANT_NAMES[Math.floor(Math.random() * VARIANT_NAMES.length)];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedIds]);
 
   const totalPages = 1;
   // When in testGroup mode, use the selected group's customers; otherwise the hardcoded set.
@@ -2017,8 +2027,8 @@ function SmartPreviewView({
                 >
                   {(layout === "single" ? selectedCustomers.slice(0, 1) : selectedCustomers).map(
                     (customer) => {
-                      // Forced variant overrides all; otherwise each CID gets its simulated random branch
-                      const variantKey = selectedVariant ?? CUSTOMER_VARIANT_MAP[customer.id] ?? "Variant 1";
+                      // Forced variant overrides all; otherwise use the stable random assignment for this CID
+                      const variantKey = selectedVariant ?? autoVariantMap[customer.id] ?? "Variant 1";
                       return (
                         <div key={customer.id} className="flex flex-col gap-3 shrink-0">
                           <span

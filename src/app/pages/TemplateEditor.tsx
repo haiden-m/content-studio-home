@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, Fragment, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { createRoot } from "react-dom/client";
 import {
   SlidersHorizontal, BadgeCheck,
   Palette, Settings, ArrowRight, Plus, Trash2,
   Code2, Sparkles, Clock, FileText, Flag,
   Minimize2, X, Database, GitBranch, Wand2, ChevronUp, ChevronDown,
   Search, User, ArrowLeft, LayoutGrid, Square, Maximize2, Check, Shuffle,
-  Monitor, Smartphone,
+  Monitor, Smartphone, Mail, FileDown, Link2, Copy, Globe, Send, UserPlus, Lock,
 } from "lucide-react";
 
 import svgPaths from "@/imports/EmailTemplateEditorOptiAi/svg-zzsi5zbbwy";
@@ -15,6 +16,7 @@ import {
   PersonalisationPicker,
   type PersonalisationPickerAnchor,
 } from "../components/PersonalisationPicker";
+import { OptiGeniePanelV3, isV3Available } from "../components/OptiGeniePanelV3";
 import {
   DEFAULT_TEMPLATE_CONTENT,
   type PersonalisationOption,
@@ -970,21 +972,48 @@ const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
 interface PreviewCustomer {
   id: string;
   firstName: string;
-  headerFooter: string;
-  currentPoints: number;
+  language: string;
   availableSpend: number;
   email: string;
 }
 
 const PREVIEW_CUSTOMERS: PreviewCustomer[] = [
-  { id: "32299512", firstName: "James", headerFooter: "SLP", currentPoints: 168, availableSpend: 0, email: "aliah@optimove.com" },
-  { id: "88910212", firstName: "Paul", headerFooter: "MVC", currentPoints: 1193, availableSpend: 5, email: "aliah@optimove.com" },
-  { id: "64372839", firstName: "Barbara", headerFooter: "SLP", currentPoints: 10410, availableSpend: 52, email: "barbara@optimove.com" },
-  { id: "37849537", firstName: "Scott", headerFooter: "SLP", currentPoints: 2270, availableSpend: 11, email: "scott@optimove.com" },
-  { id: "59375833", firstName: "Cora", headerFooter: "SLP", currentPoints: 2079, availableSpend: 10, email: "cora@optimove.com" },
+  { id: "32299512", firstName: "James",  language: "English",    availableSpend: 0,  email: "james@optimove.com" },
+  { id: "88910212", firstName: "Carlos", language: "Spanish",    availableSpend: 5,  email: "carlos@optimove.com" },
+  { id: "64372839", firstName: "Marie",  language: "French",     availableSpend: 52, email: "marie@optimove.com" },
+  { id: "37849537", firstName: "Ivan",   language: "Bulgarian",  availableSpend: 11, email: "ivan@optimove.com" },
 ];
 
-const DEFAULT_SELECTED_IDS = new Set(["32299512", "88910212"]);
+const DEFAULT_SELECTED_IDS = new Set(["32299512", "88910212", "64372839", "37849537"]);
+
+// Language-specific template content — keyed by the customer's language tag.
+// Falls back to the live editor templateContent for English (no override needed).
+const LANGUAGE_CONTENT: Record<string, Partial<TemplateContent>> = {
+  Spanish: {
+    heroHeadline:  "FIN DE SEMANA DE LA CHAMPIONS LEAGUE",
+    heroBadge:     "FIN DE SEMANA DE PARTIDOS",
+    bodyHeading:   "🔥 ¡Tu oportunidad de ganar en grande! ⚽️",
+    bodyCopy:      "¡Los partidos de la Champions League este fin de semana significan más oportunidades de ver a tu equipo favorito y ganar en grande!",
+    ctaText:       "Apostar",
+    topPicksLabel: "🔥 Nuestras mejores selecciones para ti:",
+  },
+  French: {
+    heroHeadline:  "WEEK-END DE LA CHAMPIONS LEAGUE",
+    heroBadge:     "WEEK-END DE MATCHS",
+    bodyHeading:   "🔥 Votre chance de gagner gros ! ⚽️",
+    bodyCopy:      "Les matchs de la Champions League ce week-end offrent plus d'opportunités de voir votre équipe favorite et de gagner gros !",
+    ctaText:       "Parier",
+    topPicksLabel: "🔥 Nos meilleurs choix pour vous :",
+  },
+  Bulgarian: {
+    heroHeadline:  "УИК-ЕНД НА ШАМПИОНСКА ЛИГА",
+    heroBadge:     "УИК-ЕНД С МАЧОВЕ",
+    bodyHeading:   "🔥 Вашият шанс да спечелите много! ⚽️",
+    bodyCopy:      "Мачовете от Шампионска лига тази уикенд означават повече възможности да гледате любимия си отбор и да спечелите много!",
+    ctaText:       "Залог",
+    topPicksLabel: "🔥 Нашите топ избори за вас:",
+  },
+};
 
 function PreviewRadio({
   checked,
@@ -1058,15 +1087,8 @@ function CustomerCard({
           <PreviewCheckbox checked={selected} onChange={onToggle} />
         </div>
       </div>
-      <div className="bg-white px-6 py-4 flex flex-col gap-2">
-        <div className="flex flex-wrap gap-2">
-          <CustomerMetaBadge>First Name: {customer.firstName}</CustomerMetaBadge>
-          <CustomerMetaBadge>Header Footer: {customer.headerFooter}</CustomerMetaBadge>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <CustomerMetaBadge>Current points: {customer.currentPoints}</CustomerMetaBadge>
-          <CustomerMetaBadge>Available Spend: {customer.availableSpend}</CustomerMetaBadge>
-        </div>
+      <div className="bg-white px-6 py-4">
+        <CustomerMetaBadge>{customer.language}</CustomerMetaBadge>
       </div>
     </div>
   );
@@ -1080,7 +1102,7 @@ function SmartPreviewEmailCard({
   content: TemplateContent;
 }) {
   return (
-    <div className="bg-white border border-[#d0d5dd] rounded-xl overflow-hidden w-full max-w-[424px] flex flex-col max-h-full">
+    <div className="bg-white border border-[#d0d5dd] rounded-xl overflow-hidden w-[424px] shrink-0 flex flex-col max-h-full">
       <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-6 py-5 shrink-0">
         <div className="flex gap-3 items-start">
           <div className="flex flex-1 gap-2.5 min-w-0">
@@ -1122,6 +1144,455 @@ function SmartPreviewEmailCard({
 type PreviewChannel = "email" | "mobilePush" | "webPopup";
 type PreviewLayout = "single" | "grid";
 
+// ─── Expanded preview (new tab) ───────────────────────────────────────────────
+
+function ExpandedPreviewPage({
+  customers,
+  templateContent,
+}: {
+  customers: PreviewCustomer[];
+  templateContent: TemplateContent;
+}) {
+  return (
+    <div className="min-h-screen bg-[#f9fafb] p-8" style={ROBOTO}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[#101828]">Email Preview — All Variants</h1>
+        <SendPreviewDropdown customers={customers} templateContent={templateContent} />
+      </div>
+      <div className="flex gap-6 items-start overflow-x-auto pb-4">
+        {customers.map((customer) => (
+          <div key={customer.id} className="shrink-0 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium text-[#363f72] bg-[#f8f9fc] border border-[#d5d9eb]">
+                {customer.language}
+              </span>
+              <span className="text-sm text-[#667085]">ID: {customer.id}</span>
+            </div>
+            <SmartPreviewEmailCard
+              customer={customer}
+              content={{ ...templateContent, ...LANGUAGE_CONTENT[customer.language] }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function openExpandedPreview(
+  customers: PreviewCustomer[],
+  templateContent: TemplateContent,
+) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+
+  win.document.write(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Email Preview</title></head><body style="margin:0"><div id="root"></div></body></html>',
+  );
+  win.document.close();
+
+  // Copy all stylesheets (Tailwind + fonts) from the current document.
+  document.querySelectorAll('style, link[rel="stylesheet"]').forEach((el) => {
+    win.document.head.appendChild(el.cloneNode(true));
+  });
+
+  const container = win.document.getElementById("root")!;
+  createRoot(container).render(
+    <ExpandedPreviewPage customers={customers} templateContent={templateContent} />,
+  );
+}
+
+// ─── Send Preview dropdown + modals ──────────────────────────────────────────
+
+const MOCK_SHARE_URL = "https://preview.optimove.com/share/csl-wknd-2026";
+
+type SharePermission = "View" | "Comment" | "Edit";
+interface ShareViewer { email: string; initials: string; permission: SharePermission }
+type ActiveModal = "email" | "pdf" | "link" | null;
+
+// ─── Shared link state (synced across windows via localStorage + BroadcastChannel) ─
+
+const LINK_STORAGE_KEY = "cs_preview_link_state";
+const DEFAULT_LINK_STATE = {
+  viewers: [
+    { email: "haiden@optimove.com", initials: "HM", permission: "Edit" as SharePermission },
+    { email: "omer@optimove.com",   initials: "OC", permission: "View" as SharePermission },
+  ] as ShareViewer[],
+  publicAccess: false,
+};
+
+function readLinkState() {
+  try {
+    const raw = localStorage.getItem(LINK_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as typeof DEFAULT_LINK_STATE;
+  } catch {}
+  return DEFAULT_LINK_STATE;
+}
+
+function useSharedLinkState() {
+  const [state, setStateLocal] = useState(readLinkState);
+  const bc = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    bc.current = new BroadcastChannel(LINK_STORAGE_KEY);
+    bc.current.onmessage = (e) => setStateLocal(e.data as typeof DEFAULT_LINK_STATE);
+    return () => { bc.current?.close(); bc.current = null; };
+  }, []);
+
+  const setState = (next: typeof DEFAULT_LINK_STATE) => {
+    setStateLocal(next);
+    localStorage.setItem(LINK_STORAGE_KEY, JSON.stringify(next));
+    bc.current?.postMessage(next);
+  };
+
+  return { state, setState };
+}
+
+function PermissionBadge({ value, onChange }: { value: SharePermission; onChange: (v: SharePermission) => void }) {
+  const colors: Record<SharePermission, string> = {
+    View: "text-[#344054] bg-[#f9fafb] border-[#d0d5dd]",
+    Comment: "text-[#b54708] bg-[#fffaeb] border-[#fedf89]",
+    Edit: "text-[#067647] bg-[#ecfdf3] border-[#abefc6]",
+  };
+  const opts: SharePermission[] = ["View", "Comment", "Edit"];
+  return (
+    <div className="relative group">
+      <button className={`text-xs font-medium px-2 py-0.5 rounded-full border ${colors[value]} whitespace-nowrap`}>
+        {value}
+      </button>
+      <div className="absolute right-0 top-full mt-1 bg-white border border-[#eaecf0] rounded-lg shadow-lg z-50 hidden group-hover:block min-w-[100px]">
+        {opts.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-[#f9fafb] ${opt === value ? "text-[#7068de]" : "text-[#344054]"}`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SendPreviewDropdown({
+  customers,
+  templateContent,
+}: {
+  customers: PreviewCustomer[];
+  templateContent: TemplateContent;
+}) {
+  const [open, setOpen] = useState(false);
+  const [modal, setModal] = useState<ActiveModal>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  // Email modal state
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+
+  // Living link state — shared across the main tab and any expanded-tab windows
+  const { state: linkState, setState: setLinkState } = useSharedLinkState();
+  const viewers = linkState.viewers;
+  const publicAccess = linkState.publicAccess;
+  const setViewers = (fn: (prev: ShareViewer[]) => ShareViewer[]) =>
+    setLinkState({ ...linkState, viewers: fn(viewers) });
+  const setPublicAccess = (v: boolean) => setLinkState({ ...linkState, publicAccess: v });
+
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [newViewer, setNewViewer] = useState("");
+  const [newPerm, setNewPerm] = useState<SharePermission>("View");
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const openModal = (m: ActiveModal) => { setOpen(false); setModal(m); };
+
+  const handlePdf = () => {
+    setOpen(false);
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(
+      '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Email Preview — PDF</title></head><body style="margin:0"><div id="root"></div></body></html>',
+    );
+    win.document.close();
+    document.querySelectorAll('style, link[rel="stylesheet"]').forEach((el) => {
+      win.document.head.appendChild(el.cloneNode(true));
+    });
+    const ps = win.document.createElement("style");
+    ps.textContent = "@media print { @page { margin: 12mm; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }";
+    win.document.head.appendChild(ps);
+    const container = win.document.getElementById("root")!;
+    createRoot(container).render(
+      <ExpandedPreviewPage customers={customers} templateContent={templateContent} />,
+    );
+    setTimeout(() => win.print(), 700);
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(MOCK_SHARE_URL).catch(() => {});
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const addViewer = () => {
+    const email = newViewer.trim();
+    if (!email || viewers.some((v) => v.email === email)) return;
+    const initials = email.slice(0, 2).toUpperCase();
+    setViewers((prev) => [...prev, { email, initials, permission: newPerm }]);
+    setNewViewer("");
+  };
+
+  const menu = [
+    { icon: Mail,     label: "Email",           sub: "Send to recipients", action: () => openModal("email") },
+    { icon: FileDown, label: "Download as PDF",  sub: "All language variants", action: handlePdf },
+    { icon: Link2,    label: "Living link",      sub: "Shareable with permissions", action: () => openModal("link") },
+  ];
+
+  return (
+    <>
+      {/* Trigger */}
+      <div className="relative" ref={dropRef}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="h-9 flex items-center gap-1.5 px-3 rounded-lg bg-[#7068de] text-white text-sm font-semibold hover:bg-[#5f57cc] shadow-sm transition-colors"
+          style={ROBOTO}
+        >
+          <Send size={15} strokeWidth={2} />
+          Send Preview
+          <ChevronDown size={14} strokeWidth={2.5} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+
+        {open && (
+          <div className="absolute right-0 top-full mt-2 w-[240px] bg-white border border-[#eaecf0] rounded-xl shadow-lg z-50 py-1 overflow-hidden">
+            {menu.map(({ icon: Icon, label, sub, action }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={action}
+                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[#f9fafb] text-left transition-colors"
+              >
+                <div className="size-8 rounded-lg bg-[#f4f3ff] flex items-center justify-center shrink-0 mt-0.5">
+                  <Icon size={16} className="text-[#604dd0]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#344054]" style={ROBOTO}>{label}</p>
+                  <p className="text-xs text-[#667085]" style={ROBOTO}>{sub}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Email modal ── */}
+      {modal === "email" && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={() => setModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[480px] mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#eaecf0]">
+              <p className="text-base font-semibold text-[#101828]" style={ROBOTO}>Email Preview</p>
+              <button onClick={() => setModal(null)} className="text-[#667085] hover:text-[#344054]"><X size={18} /></button>
+            </div>
+            {emailSent ? (
+              <div className="flex flex-col items-center gap-3 py-12 px-6">
+                <div className="size-12 rounded-full bg-[#ecfdf3] flex items-center justify-center">
+                  <Check size={24} className="text-[#067647]" strokeWidth={2.5} />
+                </div>
+                <p className="text-base font-semibold text-[#101828]" style={ROBOTO}>Preview sent!</p>
+                <p className="text-sm text-[#475467] text-center" style={ROBOTO}>Your preview was sent to <span className="font-medium">{emailTo}</span></p>
+                <button onClick={() => { setModal(null); setEmailSent(false); setEmailTo(""); }} className="mt-2 text-sm font-semibold text-[#7068de]">Done</button>
+              </div>
+            ) : (
+              <div className="px-6 py-5 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-[#344054]" style={ROBOTO}>To</label>
+                  <input
+                    type="email"
+                    value={emailTo}
+                    onChange={(e) => setEmailTo(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full px-3 py-2.5 border border-[#d0d5dd] rounded-lg text-sm text-[#101828] placeholder:text-[#667085] focus:outline-none focus:ring-2 focus:ring-[#7068de]/30 focus:border-[#7068de]"
+                    style={ROBOTO}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-[#344054]" style={ROBOTO}>Subject</label>
+                  <input
+                    type="text"
+                    defaultValue="Champions League Weekend — Email Preview (4 variants)"
+                    className="w-full px-3 py-2.5 border border-[#d0d5dd] rounded-lg text-sm text-[#101828] focus:outline-none focus:ring-2 focus:ring-[#7068de]/30 focus:border-[#7068de]"
+                    style={ROBOTO}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-[#344054]" style={ROBOTO}>Variants included</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {customers.map((c) => (
+                      <span key={c.id} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-[#363f72] bg-[#f8f9fc] border border-[#d5d9eb]">
+                        {c.language}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-1">
+                  <button onClick={() => setModal(null)} className="h-10 px-4 text-sm font-semibold text-[#344054] border border-[#d0d5dd] rounded-lg hover:bg-[#f9fafb]" style={ROBOTO}>Cancel</button>
+                  <button
+                    disabled={!emailTo.trim()}
+                    onClick={() => setEmailSent(true)}
+                    className="h-10 px-4 text-sm font-semibold text-white bg-[#7068de] rounded-lg hover:bg-[#5f57cc] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    style={ROBOTO}
+                  >
+                    <Send size={14} strokeWidth={2} /> Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* ── Living link modal ── */}
+      {modal === "link" && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={() => setModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[520px] mx-4" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#eaecf0]">
+              <p className="text-base font-semibold text-[#101828]" style={ROBOTO}>Share Preview Link</p>
+              <button onClick={() => setModal(null)} className="text-[#667085] hover:text-[#344054]"><X size={18} /></button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-5">
+              {/* Link box */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2.5 px-3 py-2.5 border border-[#d0d5dd] rounded-lg bg-[#f9fafb] min-w-0">
+                  <Link2 size={15} className="text-[#667085] shrink-0" />
+                  <span className="text-sm text-[#344054] truncate" style={ROBOTO}>{MOCK_SHARE_URL}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className={`h-10 px-3 flex items-center gap-1.5 text-sm font-semibold rounded-lg border shadow-sm transition-colors shrink-0 ${
+                    linkCopied ? "bg-[#ecfdf3] border-[#abefc6] text-[#067647]" : "bg-white border-[#d0d5dd] text-[#344054] hover:bg-[#f9fafb]"
+                  }`}
+                  style={ROBOTO}
+                >
+                  {linkCopied ? <><Check size={14} strokeWidth={2.5} /> Copied</> : <><Copy size={14} /> Copy</>}
+                </button>
+              </div>
+
+              {/* Public access toggle */}
+              <div className="flex items-center justify-between py-3 px-4 bg-[#f9fafb] rounded-xl border border-[#eaecf0]">
+                <div className="flex items-center gap-2.5">
+                  {publicAccess ? <Globe size={16} className="text-[#7068de]" /> : <Lock size={16} className="text-[#667085]" />}
+                  <div>
+                    <p className="text-sm font-medium text-[#344054]" style={ROBOTO}>
+                      {publicAccess ? "Anyone with the link can view" : "Restricted — specific people only"}
+                    </p>
+                    <p className="text-xs text-[#667085]" style={ROBOTO}>
+                      {publicAccess ? "No sign-in required" : "Recipients must be invited below"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPublicAccess((v) => !v)}
+                  className={`relative w-10 h-5.5 rounded-full transition-colors shrink-0 ${publicAccess ? "bg-[#7068de]" : "bg-[#d0d5dd]"}`}
+                  style={{ height: "22px", width: "40px" }}
+                >
+                  <span
+                    className="absolute top-0.5 size-[18px] bg-white rounded-full shadow transition-transform"
+                    style={{ transform: publicAccess ? "translateX(19px)" : "translateX(2px)" }}
+                  />
+                </button>
+              </div>
+
+              {/* Add people */}
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium text-[#344054]" style={ROBOTO}>Add people</p>
+                <div className="flex gap-2">
+                  <div className="flex items-center gap-2 flex-1 px-3 py-2.5 border border-[#d0d5dd] rounded-lg bg-white">
+                    <UserPlus size={15} className="text-[#667085] shrink-0" />
+                    <input
+                      type="email"
+                      value={newViewer}
+                      onChange={(e) => setNewViewer(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") addViewer(); }}
+                      placeholder="name@example.com"
+                      className="flex-1 min-w-0 text-sm text-[#101828] placeholder:text-[#667085] focus:outline-none bg-transparent"
+                      style={ROBOTO}
+                    />
+                  </div>
+                  <select
+                    value={newPerm}
+                    onChange={(e) => setNewPerm(e.target.value as SharePermission)}
+                    className="h-10 px-2 border border-[#d0d5dd] rounded-lg text-sm text-[#344054] focus:outline-none bg-white"
+                    style={ROBOTO}
+                  >
+                    {(["View", "Comment", "Edit"] as SharePermission[]).map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={addViewer}
+                    disabled={!newViewer.trim()}
+                    className="h-10 px-3 bg-[#7068de] text-white text-sm font-semibold rounded-lg hover:bg-[#5f57cc] disabled:opacity-40 shrink-0"
+                    style={ROBOTO}
+                  >
+                    Invite
+                  </button>
+                </div>
+              </div>
+
+              {/* Viewer list */}
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium text-[#344054] mb-1" style={ROBOTO}>
+                  People with access <span className="text-[#667085] font-normal">({viewers.length})</span>
+                </p>
+                {viewers.map((v) => (
+                  <div key={v.email} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-[#f9fafb] group">
+                    <div className="size-8 rounded-full bg-[#e6e5fc] flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-[#5342ae]">{v.initials}</span>
+                    </div>
+                    <p className="flex-1 text-sm text-[#344054] truncate" style={ROBOTO}>{v.email}</p>
+                    <PermissionBadge
+                      value={v.permission}
+                      onChange={(perm) => setViewers((prev) => prev.map((x) => x.email === v.email ? { ...x, permission: perm } : x))}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setViewers((prev) => prev.filter((x) => x.email !== v.email))}
+                      className="opacity-0 group-hover:opacity-100 text-[#667085] hover:text-[#d92d20] ml-1 transition-opacity"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-[#eaecf0] flex justify-end">
+              <button onClick={() => setModal(null)} className="h-10 px-4 text-sm font-semibold text-white bg-[#7068de] rounded-lg hover:bg-[#5f57cc]" style={ROBOTO}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function SmartPreviewView({ templateContent }: { templateContent: TemplateContent }) {
   const [previewAs, setPreviewAs] = useState<"customerId" | "testGroup">("testGroup");
   const [testGroup, setTestGroup] = useState("New Campaign Testing Group");
@@ -1133,7 +1604,7 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
   const [channel, setChannel] = useState<PreviewChannel>("email");
   const [layout, setLayout] = useState<PreviewLayout>("grid");
 
-  const totalPages = 3;
+  const totalPages = 1;
   const selectedCustomers = PREVIEW_CUSTOMERS.filter((c) => selectedIds.has(c.id));
 
   const toggleCustomer = (id: string) => {
@@ -1203,10 +1674,13 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
             </div>
             <button
               type="button"
-              className="h-9 w-9 flex items-center justify-center rounded-lg border border-[#d0d5dd] bg-white shadow-sm"
+              onClick={() => openExpandedPreview(selectedCustomers, templateContent)}
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-[#d0d5dd] bg-white shadow-sm hover:bg-[#f2f4f7]"
+              title="Open all variants in new tab"
             >
               <Maximize2 size={18} className="text-[#344054]" />
             </button>
+            <SendPreviewDropdown customers={selectedCustomers} templateContent={templateContent} />
           </div>
         </div>
       </div>
@@ -1383,13 +1857,13 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
 
         {/* Preview area */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#f9fafb]">
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 py-4 min-w-0">
             {channel === "email" ? (
               selectedCustomers.length > 0 ? (
                 <div
                   className={
                     layout === "grid"
-                      ? "flex flex-wrap gap-6 justify-center items-start"
+                      ? "flex flex-nowrap gap-6 items-start h-full"
                       : "flex justify-center"
                   }
                 >
@@ -1398,7 +1872,7 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
                       <SmartPreviewEmailCard
                         key={customer.id}
                         customer={customer}
-                        content={templateContent}
+                        content={{ ...templateContent, ...LANGUAGE_CONTENT[customer.language] }}
                       />
                     ),
                   )}
@@ -2243,7 +2717,11 @@ export default function TemplateEditorPage({
               onContentChange={setTemplateContent}
             />
             {rightPanel === "details" && emailDetailsPanel}
-            {rightPanel === "chat" && <OptiGeniePanel initialMessages={initialChat} />}
+            {rightPanel === "chat" && (
+              isV3Available
+                ? <OptiGeniePanelV3 tab={activeTab} templateName={templateName} />
+                : <OptiGeniePanel initialMessages={initialChat} />
+            )}
             <RightToolbar
               activePanel={rightPanel}
               onSelectChat={selectChat}
@@ -2265,7 +2743,9 @@ export default function TemplateEditorPage({
             />
             {rightPanel === "details" && emailDetailsPanel}
             {rightPanel === "chat" && (
-              <OptiGeniePanel initialMessages={initialChat} />
+              isV3Available
+                ? <OptiGeniePanelV3 tab={activeTab} templateName={templateName} />
+                : <OptiGeniePanel initialMessages={initialChat} />
             )}
             <RightToolbar
               activePanel={rightPanel}

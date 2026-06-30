@@ -59,8 +59,29 @@ const HOME_NAV = [
   { icon: Upload,       label: "Import" },
 ];
 
-export function ContentStudioSidebar({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
-  const [active, setActive] = useState(0);
+// Maps page names to the nav item index they should highlight
+const PAGE_TO_NAV_INDEX: Record<string, number> = {
+  home:     0,  // BarChart2 — Content Studio
+  audience: 3,  // Users — Test Groups
+};
+
+export function ContentStudioSidebar({
+  onNavigate,
+  activePage,
+}: {
+  onNavigate?: (page: string) => void;
+  activePage?: string;
+} = {}) {
+  const derivedActive = activePage !== undefined ? (PAGE_TO_NAV_INDEX[activePage] ?? -1) : -1;
+  const [localActive, setLocalActive] = useState(0);
+  const activeIndex = activePage !== undefined ? derivedActive : localActive;
+
+  const handleClick = (i: number) => {
+    setLocalActive(i);
+    if (i === 0) onNavigate?.("home");      // BarChart2 → Content Studio
+    if (i === 3) onNavigate?.("audience");  // Users → Test Groups
+  };
+
   return (
     <aside className="w-20 flex-shrink-0 bg-[#3c378e] flex flex-col justify-between py-6 z-10">
       <div className="flex flex-col items-center gap-8">
@@ -70,15 +91,12 @@ export function ContentStudioSidebar({ onNavigate }: { onNavigate?: (page: strin
         <nav className="flex flex-col gap-1 items-center w-full px-2">
           {HOME_NAV.map((item, i) => {
             const Icon = item.icon;
-            const isActive = active === i;
+            const isActive = activeIndex === i;
             return (
               <button
                 key={i}
                 title={item.label}
-                onClick={() => {
-                  setActive(i);
-                  if (i === 3) onNavigate?.("audience"); // Audience → Test Groups
-                }}
+                onClick={() => handleClick(i)}
                 className={`w-12 h-12 flex items-center justify-center rounded-lg transition-colors ${
                   isActive ? "bg-white/15" : "hover:bg-white/10"
                 }`}

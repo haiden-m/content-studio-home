@@ -563,10 +563,12 @@ export default function TestGroupWizardPage({
   group,
   onSave,
   onClose,
+  onNavigate,
 }: {
   group: TestGroup | null;
   onSave: (g: TestGroup) => void;
   onClose: () => void;
+  onNavigate?: (page: string) => void;
 }) {
   const isEdit = group !== null;
   const [step, setStep] = useState(0);
@@ -616,7 +618,7 @@ export default function TestGroupWizardPage({
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <ContentStudioSidebar />
+      <ContentStudioSidebar onNavigate={onNavigate} activePage="audience" />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav />

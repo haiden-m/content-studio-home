@@ -969,6 +969,94 @@ function EmailPreview({
 
 const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
 
+type ContentVersion = "All" | "Variant 1" | "Variant 2" | "Variant 3" | "Variant 4";
+const CONTENT_VERSIONS: ContentVersion[] = ["All", "Variant 1", "Variant 2", "Variant 3", "Variant 4"];
+
+function PreviewOptionsPanel({
+  selectedVariant,
+  onSelectVariant,
+  onClose,
+  anchorEl,
+}: {
+  selectedVariant: string | null;
+  onSelectVariant: (v: string | null) => void;
+  onClose: () => void;
+  anchorEl: HTMLButtonElement | null;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({ opacity: 0, pointerEvents: "none" });
+  const isAllMode = selectedVariant === null;
+
+  useEffect(() => {
+    if (!anchorEl) return;
+    const rect = anchorEl.getBoundingClientRect();
+    setPanelStyle({
+      position: "fixed",
+      top: rect.bottom + 8,
+      right: window.innerWidth - rect.right,
+      zIndex: 200,
+      opacity: 1,
+      pointerEvents: "auto",
+    });
+  }, [anchorEl]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        panelRef.current?.contains(e.target as Node) ||
+        anchorEl?.contains(e.target as Node)
+      ) return;
+      onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [anchorEl, onClose]);
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      style={panelStyle}
+      className="bg-white rounded-2xl border border-[#eaecf0] shadow-[0px_12px_32px_rgba(16,24,40,0.12),0px_4px_8px_rgba(16,24,40,0.06)] w-[180px] overflow-hidden"
+    >
+      {/* Minimal top row: just X */}
+      <div className="flex justify-end px-2.5 pt-2.5 pb-0">
+        <button
+          type="button"
+          onClick={onClose}
+          className="size-6 flex items-center justify-center rounded-md text-[#98a2b3] hover:text-[#344054] hover:bg-[#f2f4f7] transition-colors"
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* Flat list */}
+      <div className="px-2 pb-2.5 flex flex-col gap-0.5">
+        {CONTENT_VERSIONS.map((version) => {
+          const isAll = version === "All";
+          const isActive = isAll ? isAllMode : selectedVariant === version;
+          return (
+            <button
+              key={version}
+              type="button"
+              onClick={() => onSelectVariant(isAll ? null : (selectedVariant === version ? null : version))}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${
+                isActive
+                  ? "bg-[#f5f4ff] text-[#604dd0] font-medium"
+                  : "text-[#344054] hover:bg-[#f9fafb]"
+              }`}
+              style={ROBOTO}
+            >
+              <span>{version}</span>
+              {isActive && <Check size={13} className="text-[#604dd0]" strokeWidth={2.5} />}
+            </button>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 interface PreviewCustomer {
   id: string;
   firstName: string;
@@ -984,7 +1072,6 @@ const PREVIEW_CUSTOMERS: PreviewCustomer[] = [
   { id: "37849537", firstName: "Ivan",   language: "Bulgarian",  availableSpend: 11, email: "ivan@optimove.com" },
 ];
 
-const DEFAULT_SELECTED_IDS = new Set(["32299512", "88910212", "64372839", "37849537"]);
 
 // Language-specific template content — keyed by the customer's language tag.
 // Falls back to the live editor templateContent for English (no override needed).
@@ -1013,6 +1100,50 @@ const LANGUAGE_CONTENT: Record<string, Partial<TemplateContent>> = {
     ctaText:       "Залог",
     topPicksLabel: "🔥 Нашите топ избори за вас:",
   },
+};
+
+const VARIANT_CONTENT: Record<string, Partial<TemplateContent>> = {
+  "Variant 1": {
+    heroHeadline:  "CHAMPIONS LEAGUE WEEKEND",
+    heroBadge:     "MATCH WEEKEND",
+    bodyHeading:   "🔥 {{ customer.firstName }}, your chance to Win BIG! ⚽️",
+    bodyCopy:      "Champions league games this weekend mean more opportunities to watch your favourite team and win Big!",
+    ctaText:       "Place Bet",
+    topPicksLabel: "🔥 Our Top Picks for You:",
+  },
+  "Variant 2": {
+    heroHeadline:  "DON'T MISS TONIGHT'S FIXTURES",
+    heroBadge:     "LIVE TONIGHT",
+    bodyHeading:   "⚡ {{ customer.firstName }}, your exclusive offer expires at kick-off!",
+    bodyCopy:      "Tonight's Champions League fixtures are your best chance to back your team. Don't let this offer slip away — place your bet before kick-off.",
+    ctaText:       "Bet Now →",
+    topPicksLabel: "⚡ Tonight's Best Odds:",
+  },
+  "Variant 3": {
+    heroHeadline:  "🏆 CHAMPIONS LEAGUE IS BACK",
+    heroBadge:     "LIVE MATCHES",
+    bodyHeading:   "{{ customer.firstName }}, it's match day — make it count! 🎯",
+    bodyCopy:      "The biggest club football is here. Pick your winner, back your team, and watch the action unfold. Your personalised picks are ready.",
+    ctaText:       "See My Picks",
+    topPicksLabel: "🎯 Picked just for you:",
+  },
+  "Variant 4": {
+    heroHeadline:  "YOUR CHAMPIONS LEAGUE BONUS",
+    heroBadge:     "EXCLUSIVE OFFER",
+    bodyHeading:   "💰 {{ customer.firstName }}, your exclusive bonus is waiting",
+    bodyCopy:      "We've unlocked a special bonus just for you based on your betting history. Use it on any Champions League match this weekend — limited time only.",
+    ctaText:       "Claim My Bonus",
+    topPicksLabel: "💰 Your bonus picks:",
+  },
+};
+
+// Simulated random variant distribution — one variant per CID as if randomly
+// assigned during a real send. Used when no explicit CVO override is active.
+const CUSTOMER_VARIANT_MAP: Record<string, string> = {
+  "32299512": "Variant 1",
+  "88910212": "Variant 3",
+  "64372839": "Variant 2",
+  "37849537": "Variant 4",
 };
 
 function PreviewRadio({
@@ -1067,13 +1198,18 @@ function CustomerCard({
   customer,
   selected,
   onToggle,
+  disabled = false,
 }: {
   customer: PreviewCustomer;
   selected: boolean;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <div className="w-full max-w-[356px] border border-[#d0d5dd] rounded-xl overflow-hidden">
+    <div
+      className={`w-full max-w-[356px] border border-[#d0d5dd] rounded-xl overflow-hidden transition-opacity ${disabled ? "opacity-50" : ""}`}
+      title={disabled ? "Variant previews support one Customer ID only." : undefined}
+    >
       <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-6 pt-5 pb-2">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -1084,7 +1220,9 @@ function CustomerCard({
               Customer ID: {customer.id}
             </p>
           </div>
-          <PreviewCheckbox checked={selected} onChange={onToggle} />
+          <div className={disabled ? "pointer-events-none" : ""}>
+            <PreviewCheckbox checked={selected} onChange={onToggle} />
+          </div>
         </div>
       </div>
       <div className="bg-white px-6 py-4">
@@ -1102,21 +1240,20 @@ function SmartPreviewEmailCard({
   content: TemplateContent;
 }) {
   return (
-    <div className="bg-white border border-[#d0d5dd] rounded-xl overflow-hidden w-[424px] shrink-0 flex flex-col max-h-full">
-      <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-6 py-5 shrink-0">
+    <div className="bg-white border border-[#d0d5dd] rounded-xl overflow-hidden w-[360px] shrink-0 flex flex-col max-h-[calc(100vh-296px)]">
+      <div className="bg-[#f9fafb] border-b border-[#eaecf0] px-5 py-4 shrink-0">
         <div className="flex gap-3 items-start">
-          <div className="flex flex-1 gap-2.5 min-w-0">
-            <div className="size-8 rounded-full bg-[#e6e5fc] flex items-center justify-center shrink-0">
-              <User size={16} className="text-[#5342ae]" />
+          <div className="flex flex-1 gap-2 min-w-0">
+            <div className="size-7 rounded-full bg-[#e6e5fc] flex items-center justify-center shrink-0">
+              <User size={14} className="text-[#5342ae]" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-[#344054] truncate" style={ROBOTO}>
+              <p className="text-xs font-semibold text-[#344054] truncate" style={ROBOTO}>
                 Optimove &lt;noreply.optimove.cpm&gt;
               </p>
               <p className="text-xs text-[#475467] mt-0.5" style={ROBOTO}>
                 <span className="font-semibold">To:</span>
-                {"    "}
-                {customer.email}
+                {" "}{customer.email}
               </p>
             </div>
           </div>
@@ -1124,11 +1261,11 @@ function SmartPreviewEmailCard({
             {customer.id}
           </span>
         </div>
-        <p className="text-base font-semibold text-[#344054] mt-3 pl-11" style={ROBOTO}>
+        <p className="text-sm font-semibold text-[#344054] mt-2.5 pl-9 leading-snug" style={ROBOTO}>
           {DEFAULT_EMAIL_SUBJECT}
         </p>
       </div>
-      <div className="overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <EmailTemplatePreview
           content={content}
           resolveContext={{
@@ -1597,12 +1734,17 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
   const [previewAs, setPreviewAs] = useState<"customerId" | "testGroup">("testGroup");
   const [testGroup, setTestGroup] = useState("New Campaign Testing Group");
   const [customerIdInput, setCustomerIdInput] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(DEFAULT_SELECTED_IDS));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [customerPage, setCustomerPage] = useState(1);
-  const [sendTestAs, setSendTestAs] = useState<"customerId" | "email">("customerId");
-  const [sendTestValue, setSendTestValue] = useState("");
   const [channel, setChannel] = useState<PreviewChannel>("email");
   const [layout, setLayout] = useState<PreviewLayout>("grid");
+
+  // Preview Options state — null means random distribution (All), string = forced branch
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [previewOptionsOpen, setPreviewOptionsOpen] = useState(false);
+  const previewOptionsBtnRef = useRef<HTMLButtonElement>(null);
+
+  const isVariantMode = selectedVariant !== null;
 
   const totalPages = 1;
   const selectedCustomers = PREVIEW_CUSTOMERS.filter((c) => selectedIds.has(c.id));
@@ -1679,6 +1821,21 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
               title="Open all variants in new tab"
             >
               <Maximize2 size={18} className="text-[#344054]" />
+            </button>
+            {/* Variants picker trigger */}
+            <button
+              ref={previewOptionsBtnRef}
+              type="button"
+              onClick={() => setPreviewOptionsOpen((v) => !v)}
+              className={`h-9 px-3 flex items-center gap-1.5 rounded-lg border shadow-sm text-sm font-medium transition-colors ${
+                previewOptionsOpen || isVariantMode
+                  ? "border-[#a4a3f3] bg-[#e6e5fc] text-[#604dd0]"
+                  : "border-[#d0d5dd] bg-white text-[#475467] hover:bg-[#f9fafb]"
+              }`}
+              style={ROBOTO}
+            >
+              <SlidersHorizontal size={15} strokeWidth={isVariantMode ? 2 : 1.75} />
+              <span>Variants</span>
             </button>
             <SendPreviewDropdown customers={selectedCustomers} templateContent={templateContent} />
           </div>
@@ -1786,95 +1943,51 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
               </div>
             </section>
 
-            {/* Send Test */}
-            <section className="flex flex-col gap-3 items-end">
-              <div className="w-full pt-5">
-                <h2 className="text-base font-semibold text-[#101828]" style={ROBOTO}>
-                  Send Test
-                </h2>
-                <p className="text-sm text-[#475467] mt-1" style={ROBOTO}>
-                  Enter a Customer ID to send a test using the above personalisation data.
-                </p>
-              </div>
-
-              <div className="flex gap-2 items-start w-full max-w-[380px]">
-                <PreviewRadio
-                  checked={sendTestAs === "customerId"}
-                  onChange={() => setSendTestAs("customerId")}
-                />
-                <div className="flex-1 min-w-0">
-                  <label className="block text-sm font-medium text-[#344054] mb-1.5" style={ROBOTO}>
-                    Customer ID
-                  </label>
-                  <input
-                    type="text"
-                    value={sendTestAs === "customerId" ? sendTestValue : ""}
-                    onChange={(e) => {
-                      setSendTestAs("customerId");
-                      setSendTestValue(e.target.value);
-                    }}
-                    placeholder="Enter customer ID"
-                    className="w-full px-3 py-2 text-base placeholder:text-[#667085] border border-[#d0d5dd] rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-[#7068de]"
-                    style={ROBOTO}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 items-start w-full max-w-[380px]">
-                <PreviewRadio
-                  checked={sendTestAs === "email"}
-                  onChange={() => setSendTestAs("email")}
-                />
-                <div className="flex-1 min-w-0">
-                  <label className="block text-sm font-medium text-[#344054] mb-1.5" style={ROBOTO}>
-                    Email
-                  </label>
-                  <input
-                    type="text"
-                    value={sendTestAs === "email" ? sendTestValue : ""}
-                    onChange={(e) => {
-                      setSendTestAs("email");
-                      setSendTestValue(e.target.value);
-                    }}
-                    placeholder="Enter email"
-                    className="w-full px-3 py-2 text-base placeholder:text-[#667085] border border-[#d0d5dd] rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-[#7068de]"
-                    style={ROBOTO}
-                  />
-                </div>
-              </div>
-
-              <button
-                type="button"
-                disabled={!sendTestValue.trim()}
-                className="px-3.5 py-2.5 rounded-lg text-sm font-semibold shadow-sm disabled:bg-[#f2f4f7] disabled:text-[#98a2b3] disabled:border disabled:border-[#f2f4f7] enabled:bg-[#7068de] enabled:text-white enabled:hover:bg-[#5f57cc]"
-                style={ROBOTO}
-              >
-                Send
-              </button>
-            </section>
           </div>
         </aside>
 
         {/* Preview area */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#f9fafb]">
-          <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 py-4 min-w-0">
+          <div className="flex-1 overflow-x-auto px-6 py-4 min-w-0">
             {channel === "email" ? (
               selectedCustomers.length > 0 ? (
                 <div
                   className={
                     layout === "grid"
-                      ? "flex flex-nowrap gap-6 items-start h-full"
+                      ? "flex flex-nowrap gap-5 items-start"
                       : "flex justify-center"
                   }
                 >
                   {(layout === "single" ? selectedCustomers.slice(0, 1) : selectedCustomers).map(
-                    (customer) => (
-                      <SmartPreviewEmailCard
-                        key={customer.id}
-                        customer={customer}
-                        content={{ ...templateContent, ...LANGUAGE_CONTENT[customer.language] }}
-                      />
-                    ),
+                    (customer) => {
+                      // Forced variant overrides all; otherwise each CID gets its simulated random branch
+                      const variantKey = selectedVariant ?? CUSTOMER_VARIANT_MAP[customer.id] ?? "Variant 1";
+                      return (
+                        <div key={customer.id} className="flex flex-col gap-3 shrink-0">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold self-start border ${
+                              isVariantMode
+                                ? "text-[#604dd0] bg-[#f5f4ff] border-[#d8d8fa]"
+                                : "text-[#667085] bg-[#f9fafb] border-[#eaecf0]"
+                            }`}
+                            style={ROBOTO}
+                          >
+                            {variantKey}
+                            {!isVariantMode && (
+                              <span className="ml-1 opacity-50 text-[10px]">random</span>
+                            )}
+                          </span>
+                          <SmartPreviewEmailCard
+                            customer={customer}
+                            content={{
+                              ...templateContent,
+                              ...(VARIANT_CONTENT[variantKey] ?? {}),
+                              ...LANGUAGE_CONTENT[customer.language],
+                            }}
+                          />
+                        </div>
+                      );
+                    },
                   )}
                 </div>
               ) : (
@@ -1894,6 +2007,15 @@ function SmartPreviewView({ templateContent }: { templateContent: TemplateConten
           </div>
         </div>
       </div>
+
+      {previewOptionsOpen && (
+        <PreviewOptionsPanel
+          selectedVariant={selectedVariant}
+          onSelectVariant={setSelectedVariant}
+          onClose={() => setPreviewOptionsOpen(false)}
+          anchorEl={previewOptionsBtnRef.current}
+        />
+      )}
     </div>
   );
 }
@@ -2583,12 +2705,14 @@ function WorkbenchView({
 
 interface TemplateEditorProps {
   onBack?: () => void;
+  onNavigate?: (page: string) => void;
   initialTab?: EditorTab;
   initialChat?: ChatMessage[];
 }
 
 export default function TemplateEditorPage({
   onBack = () => {},
+  onNavigate,
   initialTab = "content",
   initialChat,
 }: TemplateEditorProps) {
@@ -2698,7 +2822,7 @@ export default function TemplateEditorPage({
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <ContentStudioSidebar />
+      <ContentStudioSidebar onNavigate={onNavigate} activePage="home" />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav />

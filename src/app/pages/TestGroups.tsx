@@ -210,7 +210,7 @@ function TestGroupCard({
       {/* Card body */}
       <div className="p-5 flex-1 flex flex-col gap-3">
         {/* Header row */}
-        <div className="flex items-start justify-between gap-2 pl-6">
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               {group.isPinned && (
@@ -463,7 +463,7 @@ function LabelFilterPopover({
 
 // ─── TestGroupsPage ───────────────────────────────────────────────────────────
 
-export default function TestGroupsPage({ onBack }: { onBack?: () => void } = {}) {
+export default function TestGroupsPage({ onBack, onNavigate }: { onBack?: () => void; onNavigate?: (page: string) => void } = {}) {
   const [groups, setGroups] = useState<TestGroup[]>(INITIAL_TEST_GROUPS);
   const [search, setSearch] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
@@ -581,13 +581,14 @@ export default function TestGroupsPage({ onBack }: { onBack?: () => void } = {})
         group={wizardTarget}
         onSave={handleSave}
         onClose={() => setWizardOpen(false)}
+        onNavigate={onNavigate}
       />
     );
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <ContentStudioSidebar />
+      <ContentStudioSidebar onNavigate={onNavigate} activePage="audience" />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav />

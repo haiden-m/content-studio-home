@@ -10,6 +10,12 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [chatSession, setChatSession] = useState<AIChatSession | null>(null);
 
+  const navigate = (target: string) => {
+    if (target === "home" || target === "template-editor" || target === "audience") {
+      setPage(target as Page);
+    }
+  };
+
   const openEditor = (session?: AIChatSession) => {
     setChatSession(session ?? null);
     setPage("template-editor");
@@ -18,16 +24,17 @@ export default function App() {
   return (
     <div className="w-full h-screen overflow-hidden" style={{ fontFamily: "'Roboto', sans-serif" }}>
       {page === "home" && (
-        <HomePage onNavigate={openEditor} onPageNavigate={setPage} />
+        <HomePage onNavigate={openEditor} onPageNavigate={navigate} />
       )}
       {page === "template-editor" && (
         <TemplateEditorPage
           onBack={() => setPage("home")}
+          onNavigate={navigate}
           initialChat={chatSession ? buildChatFromSession(chatSession) : undefined}
         />
       )}
       {page === "audience" && (
-        <TestGroupsPage onBack={() => setPage("home")} />
+        <TestGroupsPage onBack={() => setPage("home")} onNavigate={navigate} />
       )}
     </div>
   );

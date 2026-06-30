@@ -11,7 +11,7 @@ import {
   LABEL_COLORS,
   ALL_LABELS,
 } from "../data/testGroupsMock";
-import TestGroupDrawer from "./TestGroupDrawer";
+import TestGroupWizardPage from "./TestGroupWizard";
 
 const ROBOTO = { fontFamily: "'Roboto', sans-serif" } as const;
 
@@ -463,7 +463,7 @@ function LabelFilterPopover({
 
 // ─── TestGroupsPage ───────────────────────────────────────────────────────────
 
-export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
+export default function TestGroupsPage({ onBack }: { onBack?: () => void } = {}) {
   const [groups, setGroups] = useState<TestGroup[]>(INITIAL_TEST_GROUPS);
   const [search, setSearch] = useState("");
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
@@ -471,8 +471,8 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
   const [createdByFilter, setCreatedByFilter] = useState("");
   const [sort, setSort] = useState<"updated" | "alpha" | "usage">("updated");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<TestGroup | null>(null);
+  const [wizardTarget, setWizardTarget] = useState<TestGroup | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TestGroup | null>(null);
 
   const filtered = groups
@@ -507,8 +507,8 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
       return next;
     });
 
-  const openCreate = () => { setEditTarget(null); setDrawerOpen(true); };
-  const openEdit = (g: TestGroup) => { setEditTarget(g); setDrawerOpen(true); };
+  const openCreate = () => { setWizardTarget(null); setWizardOpen(true); };
+  const openEdit = (g: TestGroup) => { setWizardTarget(g); setWizardOpen(true); };
 
   const handleSave = useCallback((group: TestGroup) => {
     setGroups((prev) => {
@@ -520,7 +520,7 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
       }
       return [group, ...prev];
     });
-    setDrawerOpen(false);
+    setWizardOpen(false);
   }, []);
 
   const handleDuplicate = (g: TestGroup) => {
@@ -574,6 +574,17 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
 
   const activeFilters = labelFilter.length > 0 || sizeFilter !== "" || createdByFilter !== "";
 
+  // Full-page wizard replaces the grid when open
+  if (wizardOpen) {
+    return (
+      <TestGroupWizardPage
+        group={wizardTarget}
+        onSave={handleSave}
+        onClose={() => setWizardOpen(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <ContentStudioSidebar />
@@ -583,15 +594,6 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
 
         <div className="flex-1 overflow-y-auto bg-[#f9fafb]">
           <div className="max-w-[1200px] mx-auto px-8 py-8">
-
-            {/* Breadcrumb */}
-            <nav className="flex items-center gap-1.5 text-xs text-[#667085] mb-5" style={ROBOTO}>
-              <button type="button" onClick={onBack} className="hover:text-[#344054]">Content Studio</button>
-              <span>/</span>
-              <span className="text-[#344054] font-medium">Audience</span>
-              <span>/</span>
-              <span className="text-[#101828] font-medium">Test Groups</span>
-            </nav>
 
             {/* Page header */}
             <div className="flex items-start justify-between mb-6">
@@ -612,8 +614,8 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
               </button>
             </div>
 
-            {/* AI Suggestions */}
-            <AISuggestionsBanner />
+            {/* AI Suggestions — hidden for now */}
+            {/* <AISuggestionsBanner /> */}
 
             {/* Search + Filter bar */}
             <div className="flex items-center gap-3 mb-5 bg-white border border-[#eaecf0] rounded-xl px-4 py-3 shadow-sm">
@@ -745,14 +747,6 @@ export default function TestGroupsPage({ onBack }: { onBack: () => void }) {
         />
       )}
 
-      {/* Create / Edit drawer */}
-      {drawerOpen && (
-        <TestGroupDrawer
-          group={editTarget}
-          onSave={handleSave}
-          onClose={() => setDrawerOpen(false)}
-        />
-      )}
     </div>
   );
 }

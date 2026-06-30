@@ -228,9 +228,10 @@ function TemplateGridCard({ card, onClick }: { card: TemplateCard; onClick?: () 
 
 interface HomeProps {
   onNavigate: (session?: AIChatSession) => void;
+  onPageNavigate?: (page: string) => void;
 }
 
-export default function HomePage({ onNavigate }: HomeProps) {
+export default function HomePage({ onNavigate, onPageNavigate }: HomeProps) {
   const carousel = useDragScroll();
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
@@ -330,7 +331,7 @@ export default function HomePage({ onNavigate }: HomeProps) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <ContentStudioSidebar />
+      <ContentStudioSidebar onNavigate={onPageNavigate} />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav />
